@@ -23,7 +23,8 @@ import {
   Upload,
   Download,
   FileText,
-  Grid
+  Grid,
+  AlertTriangle
 } from 'lucide-react';
 
 // --- Types ---
@@ -53,6 +54,14 @@ interface Template {
   content: string;
   tags: string[];
   isCustom?: boolean;
+}
+
+type ToastVariant = 'info' | 'success' | 'error';
+
+interface ToastMessage {
+  id: string;
+  message: string;
+  variant: ToastVariant;
 }
 
 // --- Utils ---
@@ -172,6 +181,75 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
   );
 };
 
+interface ConfirmDialogProps {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+const ConfirmDialog: React.FC<ConfirmDialogProps> = ({ message, onConfirm, onCancel }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+      <div className="flex items-start gap-3 p-5">
+        <div className="p-2 rounded-lg bg-amber-50 text-amber-600">
+          <AlertTriangle size={20} />
+        </div>
+        <div className="space-y-2 flex-1">
+          <h3 className="text-lg font-semibold text-slate-900">Please confirm</h3>
+          <p className="text-slate-600 text-sm">{message}</p>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 px-5 pb-5">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors shadow-sm"
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+interface ToastProps {
+  toasts: ToastMessage[];
+  onDismiss: (id: string) => void;
+}
+
+const ToastContainer: React.FC<ToastProps> = ({ toasts, onDismiss }) => (
+  <div className="fixed bottom-4 right-4 z-[60] space-y-2">
+    {toasts.map(toast => (
+      <div
+        key={toast.id}
+        className={`flex items-start gap-2 px-4 py-3 rounded-xl shadow-lg border text-sm max-w-sm animate-in slide-in-from-right duration-200
+          ${toast.variant === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' :
+            toast.variant === 'error' ? 'bg-red-50 text-red-800 border-red-100' :
+            'bg-slate-50 text-slate-800 border-slate-200'}`}
+      >
+        <div className="pt-0.5">
+          {toast.variant === 'success' ? <Check size={16} /> : toast.variant === 'error' ? <AlertTriangle size={16} /> : <InfoIcon />}
+        </div>
+        <div className="flex-1">{toast.message}</div>
+        <button
+          onClick={() => onDismiss(toast.id)}
+          className="text-slate-400 hover:text-slate-600"
+          aria-label="Dismiss notification"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    ))}
+  </div>
+);
+
+const InfoIcon = () => <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-[10px] font-bold">i</div>;
+
 interface TagBadgeProps {
   label: string;
   onClick?: () => void;
@@ -251,6 +329,10 @@ const App = () => {
   const [editingTemplateData, setEditingTemplateData] = useState<Template | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   // Persist Data
   useEffect(() => {
@@ -260,6 +342,17 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('prompt-manager-custom-templates', JSON.stringify(customTemplates));
   }, [customTemplates]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Derived Data
   const allAvailableCategories = useMemo(() => {
@@ -297,7 +390,7 @@ const App = () => {
       const matchesSearch = (p.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                              p.content.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-      const matchesTags = selectedTags.length === 0 || selectedTags.every(t => p.tags.includes(t));
+      const matchesTags = selectedTags.length === 0 || selectedTags.some(t => p.tags.includes(t));
       
       return matchesSearch && matchesCategory && matchesTags;
     });
@@ -309,10 +402,27 @@ const App = () => {
                              t.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
                              t.label.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchesCategory = selectedCategory === 'All' || t.category === selectedCategory;
-      const matchesTags = selectedTags.length === 0 || selectedTags.every(tag => t.tags.includes(tag));
+      const matchesTags = selectedTags.length === 0 || selectedTags.some(tag => t.tags.includes(tag));
       return matchesSearch && matchesCategory && matchesTags;
     });
   }, [allTemplates, searchQuery, selectedCategory, selectedTags]);
+
+  const promptCount = prompts.length;
+  const templateCount = allTemplates.length;
+  const tagCount = allTags.length;
+  const hasActiveFilters = !!searchQuery || selectedCategory !== 'All' || selectedTags.length > 0;
+
+  const showToast = (message: string, variant: ToastVariant = 'info') => {
+    const id = generateId();
+    setToasts(prev => [...prev, { id, message, variant }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 2600);
+  };
+
+  const requestConfirm = (message: string, action: () => void) => {
+    setConfirmState({ message, onConfirm: () => { action(); setConfirmState(null); } });
+  };
 
   // Handlers
   const handleOpenCreate = () => {
@@ -324,6 +434,20 @@ const App = () => {
     setNewTemplateName('');
     setPreviewTemplate(null);
     setIsPreviewFromDashboard(false);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenCreateTemplate = () => {
+    setViewingPromptId(null);
+    setEditingPromptId(null);
+    setFormData({ title: '', category: '', content: '', tags: [], newTag: '' });
+    setIsCustomCategory(false);
+    setIsSavingTemplate(true);
+    setNewTemplateName('');
+    setPreviewTemplate(null);
+    setIsPreviewFromDashboard(false);
+    setSaveTemplateCategory('');
+    setIsSaveTemplateCustomCategory(false);
     setIsModalOpen(true);
   };
 
@@ -400,6 +524,7 @@ const App = () => {
     if (isUpdatingCustom) {
       setCustomTemplates(prev => prev.map(t => t.id === editingTemplateData.id ? editingTemplateData : t));
       setPreviewTemplate(editingTemplateData);
+      showToast('Template updated', 'success');
     } else {
       // Create new custom template from default (Clone)
       const newTemplate: Template = {
@@ -409,6 +534,7 @@ const App = () => {
       };
       setCustomTemplates(prev => [...prev, newTemplate]);
       setPreviewTemplate(newTemplate);
+      showToast('Template saved', 'success');
     }
     setIsEditingTemplate(false);
   };
@@ -448,6 +574,7 @@ const App = () => {
         }
         return p;
       }));
+      showToast('Prompt updated', 'success');
     } else {
       // Create new
       const newPrompt: Prompt = {
@@ -461,16 +588,18 @@ const App = () => {
         versions: []
       };
       setPrompts(prev => [newPrompt, ...prev]);
+      showToast('Prompt created', 'success');
     }
     setIsModalOpen(false);
     setViewMode('prompts'); // Switch back to prompts view after creating
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this prompt?')) {
+    requestConfirm('Delete this prompt? This will remove all its versions too.', () => {
       setPrompts(prev => prev.filter(p => p.id !== id));
       setIsModalOpen(false);
-    }
+      showToast('Prompt deleted', 'success');
+    });
   };
 
   const handleInitiateSaveTemplate = () => {
@@ -505,6 +634,7 @@ const App = () => {
     setCustomTemplates(prev => [...prev, newTemplate]);
     setIsSavingTemplate(false);
     setNewTemplateName('');
+    showToast('Template saved', 'success');
   };
 
   const handleSaveTemplateCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -520,14 +650,15 @@ const App = () => {
 
   const handleDeleteTemplate = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Delete this template?')) {
+    requestConfirm('Delete this custom template?', () => {
       setCustomTemplates(prev => prev.filter(t => t.id !== id));
-    }
+      showToast('Template deleted', 'success');
+    });
   };
   
   const handleExportTemplates = () => {
     if (customTemplates.length === 0) {
-        alert("No custom templates to export.");
+        showToast("No custom templates to export.", 'info');
         return;
     }
     const blob = new Blob([JSON.stringify(customTemplates, null, 2)], { type: 'application/json' });
@@ -539,6 +670,7 @@ const App = () => {
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
     URL.revokeObjectURL(url);
+    showToast('Templates exported', 'success');
   };
 
   const handleImportTemplates = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -565,15 +697,15 @@ const App = () => {
             }));
 
             if (validTemplates.length === 0) {
-                alert("No valid templates found in file.");
+                showToast("No valid templates found in file.", 'error');
                 return;
             }
 
             setCustomTemplates(prev => [...prev, ...validTemplates]);
-            alert(`Successfully imported ${validTemplates.length} templates.`);
+            showToast(`Imported ${validTemplates.length} template${validTemplates.length > 1 ? 's' : ''}.`, 'success');
         } catch (err) {
             console.error(err);
-            alert("Failed to import templates. Please check the file format.");
+            showToast("Failed to import templates. Please check the file format.", 'error');
         }
         // Reset input
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -599,6 +731,7 @@ const App = () => {
       }
       return p;
     }));
+    showToast('Version restored', 'success');
   };
 
   const toggleTagFilter = (tag: string) => {
@@ -610,9 +743,10 @@ const App = () => {
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      alert('Copied to clipboard!');
+      showToast('Copied to clipboard', 'success');
     } catch (err) {
       console.error('Failed to copy:', err);
+      showToast('Copy failed', 'error');
     }
   };
 
@@ -646,7 +780,7 @@ const App = () => {
                   }`}
                 >
                   <FileText size={16} />
-                  Prompts
+                  Prompts ({filteredPrompts.length})
                 </button>
                 <button
                   onClick={() => setViewMode('templates')}
@@ -657,7 +791,7 @@ const App = () => {
                   }`}
                 >
                   <Grid size={16} />
-                  Templates
+                  Templates ({filteredTemplates.length})
                 </button>
               </div>
             </div>
@@ -670,8 +804,12 @@ const App = () => {
                   placeholder={viewMode === 'prompts' ? "Search prompts..." : "Search templates..."}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                  ref={searchInputRef}
+                  className="w-full pl-10 pr-16 py-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
                 />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 border border-slate-200 rounded px-1.5 py-0.5 bg-white">
+                  Ctrl/Cmd + K
+                </span>
               </div>
               
               <div className="relative">
@@ -687,11 +825,11 @@ const App = () => {
             </div>
 
             <button 
-              onClick={handleOpenCreate}
+              onClick={viewMode === 'templates' ? handleOpenCreateTemplate : handleOpenCreate}
               className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm active:transform active:scale-95 whitespace-nowrap"
             >
               <Plus size={18} />
-              New Prompt
+              {viewMode === 'templates' ? 'New Template' : 'New Prompt'}
             </button>
           </div>
 
@@ -710,6 +848,14 @@ const App = () => {
               />
             ))}
             {allTags.length === 0 && <span className="text-slate-400 text-sm italic">No tags created yet.</span>}
+            {hasActiveFilters && (
+              <button
+                onClick={() => { setSearchQuery(''); setSelectedCategory('All'); setSelectedTags([]); }}
+                className="text-xs px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -733,7 +879,7 @@ const App = () => {
                 <div 
                   key={prompt.id}
                   onClick={() => handleOpenView(prompt)}
-                  className="group bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:border-indigo-200 transition-all cursor-pointer flex flex-col h-64"
+                  className="relative group bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:border-indigo-200 transition-all cursor-pointer flex flex-col min-h-[240px]"
                 >
                   <div className="flex justify-between items-start mb-3">
                     <span className="inline-block px-2 py-1 bg-slate-100 text-slate-600 text-xs font-semibold rounded-md uppercase tracking-wide">
@@ -742,6 +888,22 @@ const App = () => {
                     <span className="text-xs text-slate-400 group-hover:text-indigo-500 transition-colors">
                       {getRelativeTime(prompt.updatedAt)}
                     </span>
+                  </div>
+                  <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); copyToClipboard(prompt.content); }}
+                      className="p-2 rounded-md bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200"
+                      title="Copy content"
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleEdit(prompt); }}
+                      className="p-2 rounded-md bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200"
+                      title="Edit prompt"
+                    >
+                      <Edit2 size={14} />
+                    </button>
                   </div>
                   
                   <h3 className="text-lg font-bold text-slate-900 mb-2 line-clamp-1 group-hover:text-indigo-600 transition-colors">
@@ -787,7 +949,7 @@ const App = () => {
                   key={template.id}
                   onClick={() => handleOpenTemplateFromDashboard(template)}
                   className={`
-                    group bg-white rounded-xl border p-5 hover:shadow-lg transition-all cursor-pointer flex flex-col h-64
+                    relative group bg-white rounded-xl border p-5 hover:shadow-lg transition-all cursor-pointer flex flex-col min-h-[240px]
                     ${template.isCustom ? 'border-purple-200 hover:border-purple-300' : 'border-slate-200 hover:border-indigo-200'}
                   `}
                 >
@@ -808,6 +970,22 @@ const App = () => {
                             <Trash2 size={16} />
                         </button>
                     )}
+                  </div>
+                  <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); copyToClipboard(template.content); }}
+                      className="p-2 rounded-md bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200"
+                      title="Copy content"
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleOpenTemplateFromDashboard(template); }}
+                      className="p-2 rounded-md bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200"
+                      title="Open template"
+                    >
+                      <Eye size={14} />
+                    </button>
                   </div>
                   
                   <div className="flex items-center gap-2 mb-2">
@@ -1378,6 +1556,19 @@ const App = () => {
           </>
         )}
       </Modal>
+
+      {confirmState && (
+        <ConfirmDialog 
+          message={confirmState.message}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
+
+      <ToastContainer 
+        toasts={toasts} 
+        onDismiss={(id) => setToasts(prev => prev.filter(t => t.id !== id))} 
+      />
     </div>
   );
 };
