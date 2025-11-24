@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ConvexProvider, ConvexReactClient, useQuery, useMutation } from "convex/react";
+import { api } from "./convex/_generated/api";
+import { Id } from "./convex/_generated/dataModel";
 import { 
   Plus, 
   Search, 
@@ -30,30 +33,33 @@ import {
 // --- Types ---
 
 interface Version {
-  id: string;
+  _id: Id<"versions">;
+  _creationTime: number;
+  promptId: Id<"prompts">;
   content: string;
   timestamp: number;
 }
 
 interface Prompt {
-  id: string;
+  _id: Id<"prompts">;
+  _creationTime: number;
   title: string;
   category: string;
   content: string;
   tags: string[];
   createdAt: number;
   updatedAt: number;
-  versions: Version[];
 }
 
 interface Template {
-  id: string;
+  _id: Id<"templates">;
+  _creationTime: number;
   label: string;
   title: string;
   category: string;
   content: string;
   tags: string[];
-  isCustom?: boolean;
+  isCustom: boolean;
 }
 
 type ToastVariant = 'info' | 'success' | 'error';
@@ -88,75 +94,7 @@ const getRelativeTime = (timestamp: number) => {
   return rtf.format(Math.ceil(diffInSeconds / 86400), 'days');
 };
 
-// --- Seed Data ---
-
-const INITIAL_PROMPTS: Prompt[] = [
-  {
-    id: '1',
-    title: 'SEO Blog Post Generator',
-    category: 'Content Writing',
-    content: 'Write a comprehensive, SEO-optimized blog post about [Topic]. \n\nInclude the following sections:\n1. Introduction with a hook\n2. What is [Topic]?\n3. Benefits of [Topic]\n4. Step-by-step guide\n5. Conclusion\n\nTarget keywords: [Keyword 1], [Keyword 2]. Tone: Professional yet engaging.',
-    tags: ['seo', 'blogging', 'marketing'],
-    createdAt: Date.now() - 86400000 * 2,
-    updatedAt: Date.now() - 3600000,
-    versions: []
-  },
-  {
-    id: '2',
-    title: 'React Component Boilerplate',
-    category: 'Code Generation',
-    content: 'Create a reusable React functional component named [ComponentName] using TypeScript.\n\nRequirements:\n- Accept props: [Props List]\n- Use tailwind-merge for class handling\n- Include standard HTMLButtonAttributes\n- Implement proper error handling',
-    tags: ['react', 'typescript', 'frontend'],
-    createdAt: Date.now() - 86400000 * 5,
-    updatedAt: Date.now() - 86400000 * 5,
-    versions: []
-  },
-  {
-    id: '3',
-    title: 'Email Newsletter Intro',
-    category: 'Marketing',
-    content: 'Draft a catchy introduction for a weekly newsletter focusing on [Industry News]. The audience is [Target Audience]. Keep it under 100 words and create a sense of urgency.',
-    tags: ['email', 'copywriting'],
-    createdAt: Date.now() - 86400000 * 10,
-    updatedAt: Date.now() - 86400000 * 1,
-    versions: []
-  }
-];
-
-const DEFAULT_TEMPLATES: Template[] = [
-  {
-    id: 't1',
-    label: 'Blog Post Generator',
-    title: 'SEO Optimized Blog Post',
-    category: 'Content Writing',
-    content: 'Write a comprehensive, SEO-optimized blog post about [Topic].\n\nTarget Keywords: [Keywords]\n\nStructure:\n1. Introduction\n2. Main Body\n3. Conclusion',
-    tags: ['seo', 'blogging', 'content']
-  },
-  {
-    id: 't2',
-    label: 'Code Debugger',
-    title: 'Code Debugging Assistant',
-    category: 'Development',
-    content: 'I have a bug in the following code:\n\n```\n[Insert Code Here]\n```\n\nError message: [Insert Error]\n\nPlease analyze the code, explain the error, and provide a fixed version.',
-    tags: ['coding', 'debug', 'development']
-  },
-  {
-    id: 't3',
-    label: 'Social Caption',
-    title: 'Social Media Caption Writer',
-    category: 'Social Media',
-    content: 'Write an engaging Instagram caption for a photo about [Description].\n\nTone: [e.g., Funny, Professional]\nInclude 3-5 relevant hashtags.',
-    tags: ['social-media', 'instagram', 'marketing']
-  },
-  {
-    id: 't4',
-    label: 'Email Autoresponder',
-    title: 'Professional Email Response',
-    category: 'Communication',
-    content: 'Draft a polite and professional response to the following email:\n\n"[Insert Incoming Email]"\n\nKey points to cover:\n- [Point 1]\n- [Point 2]',
-    tags: ['email', 'business', 'communication']
-  }
-];
+// --- Seed Data removed - now in Convex database ---
 
 // --- Components ---
 
@@ -278,16 +216,21 @@ const TagBadge: React.FC<TagBadgeProps> = ({ label, onClick, active, onRemove })
 );
 
 const App = () => {
-  // State
-  const [prompts, setPrompts] = useState<Prompt[]>(() => {
-    const saved = localStorage.getItem('prompt-manager-data');
-    return saved ? JSON.parse(saved) : INITIAL_PROMPTS;
-  });
-  
-  const [customTemplates, setCustomTemplates] = useState<Template[]>(() => {
-    const saved = localStorage.getItem('prompt-manager-custom-templates');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Convex queries
+  const prompts = useQuery(api.prompts.list) ?? [];
+  const templates = useQuery(api.templates.list) ?? [];
+  const allCategories = useQuery(api.prompts.getCategories) ?? [];
+  const allTags = useQuery(api.prompts.getTags) ?? [];
+
+  // Convex mutations
+  const createPrompt = useMutation(api.prompts.create);
+  const updatePrompt = useMutation(api.prompts.update);
+  const deletePrompt = useMutation(api.prompts.remove);
+  const restoreVersion = useMutation(api.prompts.restoreVersion);
+
+  const createTemplate = useMutation(api.templates.create);
+  const updateTemplate = useMutation(api.templates.update);
+  const deleteTemplate = useMutation(api.templates.remove);
 
   const [viewMode, setViewMode] = useState<'prompts' | 'templates'>('prompts');
   const [searchQuery, setSearchQuery] = useState('');
@@ -296,8 +239,8 @@ const App = () => {
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null); // If null but modal open -> Create mode
-  const [viewingPromptId, setViewingPromptId] = useState<string | null>(null);
+  const [editingPromptId, setEditingPromptId] = useState<Id<"prompts"> | null>(null); // If null but modal open -> Create mode
+  const [viewingPromptId, setViewingPromptId] = useState<Id<"prompts"> | null>(null);
   
   // Form State
   const [formData, setFormData] = useState<{
@@ -334,15 +277,13 @@ const App = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
-  // Persist Data
-  useEffect(() => {
-    localStorage.setItem('prompt-manager-data', JSON.stringify(prompts));
-  }, [prompts]);
+  // Get versions for the current viewing/editing prompt
+  const currentPromptVersions = useQuery(
+    api.versions.list,
+    viewingPromptId ? { promptId: viewingPromptId } : "skip"
+  ) ?? [];
 
-  useEffect(() => {
-    localStorage.setItem('prompt-manager-custom-templates', JSON.stringify(customTemplates));
-  }, [customTemplates]);
-
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -355,35 +296,13 @@ const App = () => {
   }, []);
 
   // Derived Data
-  const allAvailableCategories = useMemo(() => {
-    const cats = new Set([
-        ...prompts.map(p => p.category),
-        ...customTemplates.map(t => t.category),
-        ...DEFAULT_TEMPLATES.map(t => t.category)
-    ]);
-    return Array.from(cats).sort();
-  }, [prompts, customTemplates]);
-
   const categories = useMemo(() => {
-    return ['All', ...allAvailableCategories];
-  }, [allAvailableCategories]);
-  
+    return ['All', ...allCategories];
+  }, [allCategories]);
+
   const uniqueExistingCategories = useMemo(() => {
-    return allAvailableCategories;
-  }, [allAvailableCategories]);
-
-  const allTags = useMemo(() => {
-    const tags = new Set([
-        ...prompts.flatMap(p => p.tags),
-        ...customTemplates.flatMap(t => t.tags),
-        ...DEFAULT_TEMPLATES.flatMap(t => t.tags)
-    ]);
-    return Array.from(tags);
-  }, [prompts, customTemplates]);
-
-  const allTemplates = useMemo(() => {
-    return [...DEFAULT_TEMPLATES, ...customTemplates];
-  }, [customTemplates]);
+    return allCategories;
+  }, [allCategories]);
 
   const filteredPrompts = useMemo(() => {
     return prompts.filter(p => {
@@ -397,18 +316,18 @@ const App = () => {
   }, [prompts, searchQuery, selectedCategory, selectedTags]);
 
   const filteredTemplates = useMemo(() => {
-    return allTemplates.filter(t => {
-      const matchesSearch = (t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    return templates.filter(t => {
+      const matchesSearch = (t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                              t.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
                              t.label.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchesCategory = selectedCategory === 'All' || t.category === selectedCategory;
       const matchesTags = selectedTags.length === 0 || selectedTags.some(tag => t.tags.includes(tag));
       return matchesSearch && matchesCategory && matchesTags;
     });
-  }, [allTemplates, searchQuery, selectedCategory, selectedTags]);
+  }, [templates, searchQuery, selectedCategory, selectedTags]);
 
   const promptCount = prompts.length;
-  const templateCount = allTemplates.length;
+  const templateCount = templates.length;
   const tagCount = allTags.length;
   const hasActiveFilters = !!searchQuery || selectedCategory !== 'All' || selectedTags.length > 0;
 
@@ -515,28 +434,40 @@ const App = () => {
     setIsEditingTemplate(true);
   };
 
-  const handleSaveTemplateEdit = () => {
+  const handleSaveTemplateEdit = async () => {
     if (!editingTemplateData) return;
 
-    // Check if we are updating an existing custom template or creating a new one from default
-    const isUpdatingCustom = customTemplates.some(t => t.id === editingTemplateData.id);
+    try {
+      // Check if we are updating an existing custom template or creating a new one from default
+      const isUpdatingCustom = editingTemplateData.isCustom;
 
-    if (isUpdatingCustom) {
-      setCustomTemplates(prev => prev.map(t => t.id === editingTemplateData.id ? editingTemplateData : t));
-      setPreviewTemplate(editingTemplateData);
-      showToast('Template updated', 'success');
-    } else {
-      // Create new custom template from default (Clone)
-      const newTemplate: Template = {
-        ...editingTemplateData,
-        id: generateId(),
-        isCustom: true
-      };
-      setCustomTemplates(prev => [...prev, newTemplate]);
-      setPreviewTemplate(newTemplate);
-      showToast('Template saved', 'success');
+      if (isUpdatingCustom) {
+        await updateTemplate({
+          id: editingTemplateData._id,
+          label: editingTemplateData.label,
+          title: editingTemplateData.title,
+          category: editingTemplateData.category,
+          content: editingTemplateData.content,
+          tags: editingTemplateData.tags,
+        });
+        setPreviewTemplate(editingTemplateData);
+        showToast('Template updated', 'success');
+      } else {
+        // Create new custom template from default (Clone)
+        await createTemplate({
+          label: editingTemplateData.label,
+          title: editingTemplateData.title,
+          category: editingTemplateData.category,
+          content: editingTemplateData.content,
+          tags: editingTemplateData.tags,
+        });
+        showToast('Template saved', 'success');
+      }
+      setIsEditingTemplate(false);
+    } catch (error) {
+      showToast('Failed to save template', 'error');
+      console.error(error);
     }
-    setIsEditingTemplate(false);
   };
 
   const handleCategorySelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -550,91 +481,85 @@ const App = () => {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.title.trim() || !formData.content.trim()) return;
 
-    if (editingPromptId) {
-      // Update existing
-      setPrompts(prev => prev.map(p => {
-        if (p.id === editingPromptId) {
-          const hasContentChanged = p.content !== formData.content;
-          const newVersions = hasContentChanged 
-            ? [...p.versions, { id: generateId(), content: p.content, timestamp: Date.now() }] 
-            : p.versions;
-          
-          return {
-            ...p,
-            title: formData.title,
-            category: formData.category || 'Uncategorized',
-            content: formData.content,
-            tags: formData.tags,
-            updatedAt: Date.now(),
-            versions: newVersions
-          };
-        }
-        return p;
-      }));
-      showToast('Prompt updated', 'success');
-    } else {
-      // Create new
-      const newPrompt: Prompt = {
-        id: generateId(),
-        title: formData.title,
-        category: formData.category || 'Uncategorized',
-        content: formData.content,
-        tags: formData.tags,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        versions: []
-      };
-      setPrompts(prev => [newPrompt, ...prev]);
-      showToast('Prompt created', 'success');
+    try {
+      if (editingPromptId) {
+        // Update existing
+        await updatePrompt({
+          id: editingPromptId,
+          title: formData.title,
+          category: formData.category || 'Uncategorized',
+          content: formData.content,
+          tags: formData.tags,
+        });
+        showToast('Prompt updated', 'success');
+      } else {
+        // Create new
+        await createPrompt({
+          title: formData.title,
+          category: formData.category || 'Uncategorized',
+          content: formData.content,
+          tags: formData.tags,
+        });
+        showToast('Prompt created', 'success');
+      }
+      setIsModalOpen(false);
+      setViewMode('prompts');
+    } catch (error) {
+      showToast('Failed to save prompt', 'error');
+      console.error(error);
     }
-    setIsModalOpen(false);
-    setViewMode('prompts'); // Switch back to prompts view after creating
   };
 
-  const handleDelete = (id: string) => {
-    requestConfirm('Delete this prompt? This will remove all its versions too.', () => {
-      setPrompts(prev => prev.filter(p => p.id !== id));
-      setIsModalOpen(false);
-      showToast('Prompt deleted', 'success');
+  const handleDelete = (id: Id<"prompts">) => {
+    requestConfirm('Delete this prompt? This will remove all its versions too.', async () => {
+      try {
+        await deletePrompt({ id });
+        setIsModalOpen(false);
+        showToast('Prompt deleted', 'success');
+      } catch (error) {
+        showToast('Failed to delete prompt', 'error');
+        console.error(error);
+      }
     });
   };
 
   const handleInitiateSaveTemplate = () => {
     setNewTemplateName('');
     const currentCategory = formData.category || 'Uncategorized';
-    
+
     // Check if current category is available in the list
-    const exists = allAvailableCategories.includes(currentCategory);
-    
+    const exists = allCategories.includes(currentCategory);
+
     setSaveTemplateCategory(currentCategory);
     setIsSaveTemplateCustomCategory(!exists);
     setIsSavingTemplate(true);
   };
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = async () => {
     if (!newTemplateName.trim()) return;
-    
-    const finalCategory = isSaveTemplateCustomCategory 
-        ? (saveTemplateCategory || 'Uncategorized') 
+
+    const finalCategory = isSaveTemplateCustomCategory
+        ? (saveTemplateCategory || 'Uncategorized')
         : (saveTemplateCategory || 'Uncategorized');
 
-    const newTemplate: Template = {
-      id: generateId(),
-      label: newTemplateName.trim(),
-      title: formData.title,
-      category: finalCategory,
-      content: formData.content,
-      tags: [...formData.tags],
-      isCustom: true
-    };
-    
-    setCustomTemplates(prev => [...prev, newTemplate]);
-    setIsSavingTemplate(false);
-    setNewTemplateName('');
-    showToast('Template saved', 'success');
+    try {
+      await createTemplate({
+        label: newTemplateName.trim(),
+        title: formData.title,
+        category: finalCategory,
+        content: formData.content,
+        tags: [...formData.tags],
+      });
+      setIsSavingTemplate(false);
+      setNewTemplateName('');
+      showToast('Template saved', 'success');
+    } catch (error) {
+      showToast('Failed to save template', 'error');
+      console.error(error);
+    }
   };
 
   const handleSaveTemplateCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -648,15 +573,21 @@ const App = () => {
     }
   };
 
-  const handleDeleteTemplate = (id: string, e: React.MouseEvent) => {
+  const handleDeleteTemplate = (id: Id<"templates">, e: React.MouseEvent) => {
     e.stopPropagation();
-    requestConfirm('Delete this custom template?', () => {
-      setCustomTemplates(prev => prev.filter(t => t.id !== id));
-      showToast('Template deleted', 'success');
+    requestConfirm('Delete this custom template?', async () => {
+      try {
+        await deleteTemplate({ id });
+        showToast('Template deleted', 'success');
+      } catch (error) {
+        showToast('Failed to delete template', 'error');
+        console.error(error);
+      }
     });
   };
   
   const handleExportTemplates = () => {
+    const customTemplates = templates.filter(t => t.isCustom);
     if (customTemplates.length === 0) {
         showToast("No custom templates to export.", 'info');
         return;
@@ -678,30 +609,32 @@ const App = () => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
         try {
             const json = JSON.parse(e.target?.result as string);
             if (!Array.isArray(json)) throw new Error("Invalid format: Expected an array");
-            
-            // Basic validation and sanitization
-            const validTemplates: Template[] = json.filter((t: any) => 
+
+            // Basic validation
+            const validTemplates = json.filter((t: any) =>
                 t.label && t.title && t.content && Array.isArray(t.tags)
-            ).map((t: any) => ({
-                id: generateId(), // Regenerate ID to avoid conflicts
-                label: t.label,
-                title: t.title,
-                category: t.category || 'Uncategorized',
-                content: t.content,
-                tags: t.tags,
-                isCustom: true
-            }));
+            );
 
             if (validTemplates.length === 0) {
                 showToast("No valid templates found in file.", 'error');
                 return;
             }
 
-            setCustomTemplates(prev => [...prev, ...validTemplates]);
+            // Import each template
+            for (const t of validTemplates) {
+                await createTemplate({
+                    label: t.label,
+                    title: t.title,
+                    category: t.category || 'Uncategorized',
+                    content: t.content,
+                    tags: t.tags,
+                });
+            }
+
             showToast(`Imported ${validTemplates.length} template${validTemplates.length > 1 ? 's' : ''}.`, 'success');
         } catch (err) {
             console.error(err);
@@ -713,25 +646,17 @@ const App = () => {
     reader.readAsText(file);
   };
 
-  const handleRestoreVersion = (promptId: string, version: Version) => {
-    setPrompts(prev => prev.map(p => {
-      if (p.id === promptId) {
-        const currentAsVersion: Version = {
-          id: generateId(),
-          content: p.content,
-          timestamp: Date.now()
-        };
-
-        return {
-          ...p,
-          content: version.content,
-          updatedAt: Date.now(),
-          versions: [...p.versions, currentAsVersion]
-        };
-      }
-      return p;
-    }));
-    showToast('Version restored', 'success');
+  const handleRestoreVersion = async (promptId: Id<"prompts">, versionId: Id<"versions">) => {
+    try {
+      await restoreVersion({
+        promptId,
+        versionId
+      });
+      showToast('Version restored', 'success');
+    } catch (error) {
+      showToast('Failed to restore version', 'error');
+      console.error(error);
+    }
   };
 
   const toggleTagFilter = (tag: string) => {
@@ -751,8 +676,8 @@ const App = () => {
   };
 
   // Render Helpers
-  const currentPrompt = useMemo(() => 
-    prompts.find(p => p.id === (viewingPromptId || editingPromptId)), 
+  const currentPrompt = useMemo(() =>
+    prompts.find(p => p._id === (viewingPromptId || editingPromptId)),
   [prompts, viewingPromptId, editingPromptId]);
 
   return (
@@ -876,8 +801,8 @@ const App = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredPrompts.map(prompt => (
-                <div 
-                  key={prompt.id}
+                <div
+                  key={prompt._id}
                   onClick={() => handleOpenView(prompt)}
                   className="relative group bg-white rounded-xl border border-slate-200 p-5 hover:shadow-lg hover:border-indigo-200 transition-all cursor-pointer flex flex-col min-h-[240px]"
                 >
@@ -945,8 +870,8 @@ const App = () => {
           ) : (
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredTemplates.map(template => (
-                <div 
-                  key={template.id}
+                <div
+                  key={template._id}
                   onClick={() => handleOpenTemplateFromDashboard(template)}
                   className={`
                     relative group bg-white rounded-xl border p-5 hover:shadow-lg transition-all cursor-pointer flex flex-col min-h-[240px]
@@ -962,8 +887,8 @@ const App = () => {
                     </div>
                     {/* Delete button only visible on hover for custom templates */}
                     {template.isCustom && (
-                        <button 
-                            onClick={(e) => handleDeleteTemplate(template.id, e)}
+                        <button
+                            onClick={(e) => handleDeleteTemplate(template._id, e)}
                             className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                             title="Delete Template"
                         >
@@ -1081,8 +1006,8 @@ const App = () => {
                     >
                       <Edit2 size={16} /> Edit
                     </button>
-                    <button 
-                      onClick={() => handleDelete(currentPrompt.id)}
+                    <button
+                      onClick={() => handleDelete(currentPrompt._id)}
                       className="flex items-center justify-center gap-2 bg-white border border-slate-200 hover:border-red-300 hover:text-red-600 text-slate-700 px-4 py-2.5 rounded-lg font-medium transition-all shadow-sm"
                     >
                       <Trash2 size={16} /> Delete
@@ -1095,15 +1020,15 @@ const App = () => {
                     <History size={14} /> Version History
                   </h3>
                   <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                    {currentPrompt.versions.length === 0 ? (
+                    {currentPromptVersions.length === 0 ? (
                       <p className="text-sm text-slate-400 italic">No previous versions.</p>
                     ) : (
-                      [...currentPrompt.versions].sort((a,b) => b.timestamp - a.timestamp).map((version) => (
-                        <div key={version.id} className="bg-white p-3 rounded-lg border border-slate-200 text-sm shadow-sm group">
+                      currentPromptVersions.map((version) => (
+                        <div key={version._id} className="bg-white p-3 rounded-lg border border-slate-200 text-sm shadow-sm group">
                           <div className="flex justify-between items-start mb-2">
                             <span className="text-slate-500 text-xs font-mono">{formatDate(version.timestamp)}</span>
-                            <button 
-                              onClick={() => handleRestoreVersion(currentPrompt.id, version)}
+                            <button
+                              onClick={() => handleRestoreVersion(currentPrompt._id, version._id)}
                               className="text-indigo-600 hover:text-indigo-800 opacity-0 group-hover:opacity-100 transition-opacity"
                               title="Restore this version"
                             >
@@ -1328,20 +1253,20 @@ const App = () => {
                             >
                                 <Upload size={16} />
                             </button>
-                            <button 
+                            <button
                                 onClick={handleExportTemplates}
-                                className={`p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors ${customTemplates.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-md transition-colors ${templates.filter(t => t.isCustom).length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 title="Export Templates"
-                                disabled={customTemplates.length === 0}
+                                disabled={templates.filter(t => t.isCustom).length === 0}
                             >
                                 <Download size={16} />
                             </button>
                         </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                        {allTemplates.map((t) => (
+                        {templates.map((t) => (
                           <div
-                            key={t.id}
+                            key={t._id}
                             onClick={() => handleTemplateClick(t)}
                             className={`
                               relative text-left p-3 bg-white rounded-lg border hover:shadow-md transition-all group cursor-pointer
@@ -1350,8 +1275,8 @@ const App = () => {
                           >
                             {t.isCustom && (
                               <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button 
-                                  onClick={(e) => handleDeleteTemplate(t.id, e)}
+                                <button
+                                  onClick={(e) => handleDeleteTemplate(t._id, e)}
                                   className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
                                 >
                                   <X size={12} />
@@ -1484,7 +1409,7 @@ const App = () => {
                                     className="w-full px-3 py-2 text-sm rounded-lg border border-slate-300 bg-white focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer"
                                   >
                                       <option value="" disabled>Select category...</option>
-                                      {allAvailableCategories.filter(c => c !== 'All').map(c => (
+                                      {allCategories.map(c => (
                                           <option key={c} value={c}>{c}</option>
                                       ))}
                                       <option value="__NEW__" className="font-semibold text-indigo-600 bg-indigo-50">+ Add New Category</option>
@@ -1573,8 +1498,15 @@ const App = () => {
   );
 };
 
+// Initialize Convex client
+const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
+
 const container = document.getElementById('root');
 if (container) {
   const root = createRoot(container);
-  root.render(<App />);
+  root.render(
+    <ConvexProvider client={convex}>
+      <App />
+    </ConvexProvider>
+  );
 }
