@@ -10,7 +10,7 @@ import PromptList from './src/components/PromptList';
 import PromptDetail from './src/components/PromptDetail';
 import Editor from './src/components/Editor';
 import { ToastContainer, ConfirmDialog, SettingsPanel, TaxonomyManager } from './src/components/UI';
-import { Prompt, Template, ToastMessage, ToastVariant } from './src/types';
+import { Prompt, Template, ToastMessage, ToastVariant, Version } from './src/types';
 
 const App = () => {
   // --- Data ---
@@ -279,11 +279,20 @@ const App = () => {
     setLastAction({ type: 'Copied', timestamp: Date.now() });
   };
 
-  const handleRestoreVersion = async (version: any) => {
+  const handleRestoreVersion = async (version: Version) => {
+    if (!selectedItem) return;
     try {
-      await restoreVersion({ promptId: selectedItem!._id as Id<"prompts">, versionId: version._id });
-      showToast('Version restored', 'success');
-      setLastAction({ type: 'Version restored', timestamp: Date.now() });
+      const result = await restoreVersion({
+        promptId: selectedItem._id as Id<"prompts">,
+        versionId: version._id
+      });
+
+      if (result?.restored) {
+        showToast('Version restored', 'success');
+        setLastAction({ type: 'Version restored', timestamp: Date.now() });
+      } else {
+        showToast('Already on this version', 'info');
+      }
     } catch (error) {
       showToast('Failed to restore version', 'error');
     }

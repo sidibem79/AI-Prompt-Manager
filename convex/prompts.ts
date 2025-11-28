@@ -150,21 +150,53 @@ export const restoreVersion = mutation({
       throw new Error("Prompt or version not found");
     }
 
+    if (version.promptId !== args.promptId) {
+      throw new Error("Version does not belong to the specified prompt");
+    }
+
     // Only create a version if content is actually different
-    if (prompt.content !== version.content) {
-      // Save current content as a version before restoring
+    if (prompt.content === version.content) {
+      return { restored: false };
+    }
+
+    // Save current content as a version before restoring, but only
+    // if this exact content isn't already stored to avoid dupes
+    const [latestVersion] = await ctx.db
+      .query("versions")
+      .withIndex("by_promptId_and_timestamp", (q) =>
+        q.eq("promptId", args.promptId)
+      )
+      .order("desc")
+      .take(1);
+
+    let hasExistingContentMatch = false;
+    if (latestVersion && latestVersion.content === prompt.content) {
+      hasExistingContentMatch = true;
+    } else {
+      const existingVersions = await ctx.db
+        .query("versions")
+        .withIndex("by_promptId", (q) => q.eq("promptId", args.promptId))
+        .collect();
+
+      hasExistingContentMatch = existingVersions.some(
+        (v) => v.content === prompt.content
+      );
+    }
+
+    if (!hasExistingContentMatch) {
       await ctx.db.insert("versions", {
         promptId: args.promptId,
         content: prompt.content,
         timestamp: Date.now(),
       });
-
-      // Restore the version
-      await ctx.db.patch(args.promptId, {
-        content: version.content,
-        updatedAt: Date.now(),
-      });
     }
-    // If content is the same, do nothing (no version created, no patch needed)
+
+    // Restore the version
+    await ctx.db.patch(args.promptId, {
+      content: version.content,
+      updatedAt: Date.now(),
+    });
+
+    return { restored: true };
   },
 });
