@@ -10,6 +10,7 @@ import {
     Sparkles
 } from 'lucide-react';
 import { Prompt, Template, Version } from '../types';
+import { getTagColor, hexToRgba } from '../utils/color';
 
 interface PromptDetailProps {
     item: Prompt | Template | null;
@@ -241,11 +242,22 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                                     {item.tags.length === 0 ? (
                                         <span className="text-[11px] text-slate-400">None</span>
                                     ) : (
-                                        item.tags.map(tag => (
-                                            <span key={tag} className="text-[11px] text-slate-700 font-medium bg-[#fafaf9] px-2 py-0.5 rounded border border-slate-100">
-                                                #{tag}
-                                            </span>
-                                        ))
+                                        item.tags.map(tag => {
+                                            const color = getTagColor(tag);
+                                            return (
+                                                <span
+                                                    key={tag}
+                                                    className="text-[11px] font-semibold px-2 py-0.5 rounded-full border"
+                                                    style={{
+                                                        borderColor: hexToRgba(color, 0.4),
+                                                        backgroundColor: hexToRgba(color, 0.15),
+                                                        color: '#000000'
+                                                    }}
+                                                >
+                                                    #{tag}
+                                                </span>
+                                            );
+                                        })
                                     )}
                                 </div>
                             </div>

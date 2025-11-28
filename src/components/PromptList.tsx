@@ -50,7 +50,7 @@ const PromptList: React.FC<PromptListProps> = ({
         return {
             borderColor: hexToRgba(color, emphasize ? 0.6 : 0.3),
             backgroundColor: hexToRgba(color, emphasize ? 0.25 : 0.1),
-            color
+            color: '#000000'
         };
     };
     const starterTemplates = useMemo(() => {
