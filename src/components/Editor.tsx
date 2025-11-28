@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, Tag, LayoutTemplate, ChevronDown, BookOpen } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { X, Save, ChevronDown, BookOpen, Bold, Italic, Code2, List, Maximize2, Minimize2, Eye } from 'lucide-react';
 import { Prompt, Template } from '../types';
 import TemplatePicker from './TemplatePicker';
 
@@ -9,6 +9,8 @@ interface EditorProps {
     type: 'prompt' | 'template';
     categories: string[];
     templates: Template[];
+    tagsOptions: string[];
+    fontSize: 'sm' | 'md' | 'lg';
     onSave: (data: any) => void;
     onCancel: () => void;
 }
@@ -19,6 +21,8 @@ const Editor: React.FC<EditorProps> = ({
     type,
     categories,
     templates,
+    tagsOptions,
+    fontSize,
     onSave,
     onCancel
 }) => {
@@ -29,9 +33,17 @@ const Editor: React.FC<EditorProps> = ({
     const [newTag, setNewTag] = useState('');
     const [isCustomCategory, setIsCustomCategory] = useState(false);
     const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
+    const [focusMode, setFocusMode] = useState(false);
 
     // Template specific
     const [label, setLabel] = useState((initialData as Template).label || '');
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const suggestedTags = useMemo(
+        () => tagsOptions.filter(tag => !tags.includes(tag)).slice(0, 6),
+        [tagsOptions, tags]
+    );
 
     useEffect(() => {
         if (initialData) {
@@ -83,9 +95,76 @@ const Editor: React.FC<EditorProps> = ({
         setIsTemplatePickerOpen(false);
     };
 
+    const applyFormat = (type: 'bold' | 'italic' | 'code' | 'list') => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        const { selectionStart, selectionEnd, value } = textarea;
+        const selected = value.slice(selectionStart, selectionEnd);
+        const wrap = (prefix: string, suffix: string = prefix) => {
+            const contentToInsert = selected || 'text';
+            const newValue = value.slice(0, selectionStart) + prefix + contentToInsert + suffix + value.slice(selectionEnd);
+            setContent(newValue);
+            requestAnimationFrame(() => {
+                textarea.focus();
+                const cursorStart = selectionStart + prefix.length;
+                const cursorEnd = cursorStart + contentToInsert.length;
+                textarea.setSelectionRange(cursorStart, cursorEnd);
+            });
+        };
+
+        switch (type) {
+            case 'bold':
+                wrap('**');
+                break;
+            case 'italic':
+                wrap('*');
+                break;
+            case 'code':
+                wrap('`');
+                break;
+            case 'list': {
+                const insertion = selected ? selected.split('\n').map(line => (line ? `- ${line}` : '')).join('\n') : '- ';
+                const newValue = value.slice(0, selectionStart) + insertion + value.slice(selectionEnd);
+                setContent(newValue);
+                requestAnimationFrame(() => {
+                    const cursor = selectionStart + insertion.length;
+                    textarea.setSelectionRange(cursor, cursor);
+                });
+                break;
+            }
+        }
+    };
+
+    const renderPreview = (text: string) => {
+        let html = text
+            .replace(/```([\s\S]*?)```/g, '<pre class="bg-slate-900 text-white p-3 rounded-lg overflow-x-auto"><code>$1</code></pre>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code class="bg-slate-100 px-1 rounded">$1</code>');
+
+        html = html.replace(/^- (.*)$/gm, '<li>$1</li>');
+        html = html.replace(/(<li>.*<\/li>)/gs, '<ul class="list-disc ml-6 space-y-1">$1</ul>');
+        html = html.replace(/\n/g, '<br />');
+        return { __html: html };
+    };
+
+    const titleHelper = type === 'template'
+        ? 'Label is the internal name shown in lists. Title is what end-users see.'
+        : 'Use a descriptive title so you can find the prompt quickly later.';
+
+    const validationMessage = !title.trim()
+        ? 'Give your prompt a clear title.'
+        : !content.trim()
+            ? 'Prompt content cannot be empty.'
+            : title.length < 5
+                ? 'Longer titles are easier to scan.'
+                : '';
+
+    const fontSizeClass = fontSize === 'lg' ? 'text-xl' : fontSize === 'sm' ? 'text-base' : 'text-lg';
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className={`bg-white rounded-xl shadow-2xl w-full ${focusMode ? 'max-w-6xl h-[95vh]' : 'max-w-5xl h-[85vh]'} flex flex-col overflow-hidden animate-in zoom-in-95 duration-200`}>
 
                 {/* Toolbar */}
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-[#fafaf9]">
@@ -96,9 +175,12 @@ const Editor: React.FC<EditorProps> = ({
                         >
                             <X size={24} />
                         </button>
-                        <h2 className="text-lg font-bold text-slate-900">
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-900">
                             {mode === 'create' ? `New ${type === 'prompt' ? 'Prompt' : 'Template'}` : `Edit ${type === 'prompt' ? 'Prompt' : 'Template'}`}
-                        </h2>
+                            </h2>
+                            <p className="text-xs text-slate-500">{titleHelper}</p>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -111,6 +193,14 @@ const Editor: React.FC<EditorProps> = ({
                                 Browse Templates
                             </button>
                         )}
+
+                        <button
+                            onClick={() => setFocusMode(!focusMode)}
+                            className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white"
+                        >
+                            {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                            {focusMode ? 'Exit Focus' : 'Focus Mode'}
+                        </button>
 
                         <span className="text-xs text-slate-600 mr-2 hidden sm:inline">
                             Cmd+Enter to save
@@ -175,7 +265,7 @@ const Editor: React.FC<EditorProps> = ({
                                         onChange={(e) => setCategory(e.target.value)}
                                         placeholder="Enter category name"
                                         autoFocus
-                                        className="w-full mt-2 px-3 py-2 rounded-lg border border-teal-200 ring-2 ring-teal-50 focus:ring-teal-500 outline-none text-sm"
+                                    className="w-full mt-2 px-3 py-2 rounded-lg border border-teal-200 ring-2 ring-teal-50 focus:ring-teal-500 outline-none text-sm"
                                     />
                                 )}
                             </div>
@@ -209,6 +299,19 @@ const Editor: React.FC<EditorProps> = ({
                                         Add
                                     </button>
                                 </div>
+                                {suggestedTags.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                        {suggestedTags.map(tag => (
+                                            <button
+                                                key={tag}
+                                                onClick={() => setTags([...tags, tag])}
+                                                className="px-2 py-1 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-teal-200"
+                                            >
+                                                + {tag}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -223,16 +326,48 @@ const Editor: React.FC<EditorProps> = ({
                                 placeholder={type === 'template' ? "Template Title (e.g. Subject Line)" : "Prompt Title"}
                                 className="w-full text-3xl font-bold text-slate-900 placeholder:text-slate-300 border-none focus:ring-0 outline-none bg-transparent"
                             />
+                            {validationMessage && (
+                                <p className="text-xs text-amber-600 mt-1">{validationMessage}</p>
+                            )}
                         </div>
-                        <div className="flex-1 p-6">
-                            <textarea
-                                value={content}
-                                onChange={(e) => setContent(e.target.value)}
-                                onKeyDown={handleKeyDown}
-                                placeholder="Start typing your prompt..."
-                                className="w-full h-full resize-none border-none focus:ring-0 outline-none text-lg font-mono text-slate-700 leading-relaxed placeholder:text-slate-300 bg-transparent"
-                                spellCheck={false}
-                            />
+                        <div className="px-6 py-3 flex items-center gap-2 border-b border-slate-100">
+                            <button onClick={() => applyFormat('bold')} className="p-2 rounded hover:bg-slate-100" title="Bold">
+                                <Bold size={16} />
+                            </button>
+                            <button onClick={() => applyFormat('italic')} className="p-2 rounded hover:bg-slate-100" title="Italic">
+                                <Italic size={16} />
+                            </button>
+                            <button onClick={() => applyFormat('code')} className="p-2 rounded hover:bg-slate-100" title="Inline code">
+                                <Code2 size={16} />
+                            </button>
+                            <button onClick={() => applyFormat('list')} className="p-2 rounded hover:bg-slate-100" title="Bullet list">
+                                <List size={16} />
+                            </button>
+                            <button
+                                onClick={() => setShowPreview(!showPreview)}
+                                className={`ml-auto flex items-center gap-2 px-3 py-2 rounded-lg text-sm border ${showPreview ? 'border-teal-500 text-teal-700' : 'border-slate-200 text-slate-600'}`}
+                            >
+                                <Eye size={16} />
+                                {showPreview ? 'Hide Preview' : 'Preview'}
+                            </button>
+                        </div>
+                        <div className="flex-1 p-0 flex flex-col md:flex-row">
+                            <div className={`flex-1 p-6 ${showPreview ? 'md:w-1/2' : 'w-full'}`}>
+                                <textarea
+                                    ref={textareaRef}
+                                    value={content}
+                                    onChange={(e) => setContent(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="Start typing your prompt..."
+                                    className={`w-full h-full resize-none border-none focus:ring-0 outline-none ${fontSizeClass} font-mono text-slate-700 leading-relaxed placeholder:text-slate-300 bg-transparent`}
+                                    spellCheck={false}
+                                />
+                            </div>
+                            {showPreview && (
+                                <div className="flex-1 border-t md:border-t-0 md:border-l border-slate-100 p-6 overflow-y-auto bg-slate-50">
+                                    <div className="text-[15px] leading-relaxed text-slate-800 space-y-3" dangerouslySetInnerHTML={renderPreview(content)} />
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

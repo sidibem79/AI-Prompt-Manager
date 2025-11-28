@@ -1,13 +1,11 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     Copy,
     Edit2,
     Trash2,
     Clock,
-    Tag,
-    MoreVertical,
-    Check,
-    RotateCcw
+    RotateCcw,
+    History
 } from 'lucide-react';
 import { Prompt, Template, Version } from '../types';
 
@@ -18,6 +16,7 @@ interface PromptDetailProps {
     onCopy: (text: string) => void;
     versions?: Version[];
     onRestoreVersion?: (version: Version) => void;
+    lastAction?: { type: string; timestamp: number } | null;
 }
 
 const PromptDetail: React.FC<PromptDetailProps> = ({
@@ -26,8 +25,47 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
     onDelete,
     onCopy,
     versions = [],
-    onRestoreVersion
+    onRestoreVersion,
+    lastAction
 }) => {
+    const [showVersions, setShowVersions] = useState(true);
+    const versionsPanelWidth = 320;
+
+    const getDiffSnippet = useMemo(() => {
+        if (!item) {
+            return () => '';
+        }
+        const currentLines = (item.content || '').split('\n');
+        return (version: Version) => {
+            const versionLines = version.content.split('\n');
+            const snippet: string[] = [];
+            for (let i = 0; i < Math.max(versionLines.length, currentLines.length); i += 1) {
+                const currentLine = currentLines[i];
+                const versionLine = versionLines[i];
+                if (currentLine === versionLine) continue;
+                if (versionLine !== undefined) snippet.push(`- ${versionLine}`);
+                if (currentLine !== undefined) snippet.push(`+ ${currentLine}`);
+                if (snippet.length >= 6) break;
+            }
+            if (snippet.length === 0) {
+                return versionLines.slice(0, 4).join('\n');
+            }
+            return snippet.join('\n');
+        };
+    }, [item?.content]);
+
+    const timeAgo = (timestamp: number) => {
+        const diff = Date.now() - timestamp;
+        const minutes = Math.floor(diff / 60000);
+        if (minutes < 1) return 'just now';
+        if (minutes === 1) return '1 minute ago';
+        if (minutes < 60) return `${minutes} minutes ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
+    };
+
     if (!item) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center bg-slate-50/50 text-slate-600">
@@ -68,12 +106,17 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                         <p className="text-slate-700 font-medium">{subtitle}</p>
                     )}
 
-                    <div className="flex items-center gap-4 mt-4 text-sm text-slate-600">
+                    <div className="flex items-center gap-4 mt-4 text-sm text-slate-600 flex-wrap">
                         {/* @ts-ignore */}
                         {item.updatedAt && (
                             <span className="flex items-center gap-1.5">
                                 <Clock size={14} />
                                 Updated {new Date(item.updatedAt).toLocaleDateString()}
+                            </span>
+                        )}
+                        {lastAction && (
+                            <span className="text-teal-700 font-semibold">
+                                {lastAction.type} {timeAgo(lastAction.timestamp)}
                             </span>
                         )}
                     </div>
@@ -103,43 +146,69 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                 </div>
             </div>
 
-            {/* Content "Reading Room" */}
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[#fafaf9]">
-                <div className="max-w-4xl mx-auto">
-                    <div className="relative group">
-                        <div className="absolute -inset-4 bg-white rounded-xl shadow-sm opacity-100 transition-opacity -z-10 border border-slate-100" />
-                        <pre className="whitespace-pre-wrap font-mono text-base text-slate-800 leading-relaxed p-4">
-                            {item.content}
-                        </pre>
+            <div className="flex flex-1 overflow-hidden bg-[#f6f5f4] relative">
+                {!isTemplate && versions.length > 0 && !showVersions && (
+                    <button
+                        className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-l-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-sm absolute top-1/2 right-0 -translate-y-1/2 z-20"
+                        onClick={() => setShowVersions(true)}
+                    >
+                        <History size={14} />
+                        Show Versions
+                    </button>
+                )}
+                {/* Content "Reading Room" */}
+                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                    <div className="max-w-4xl mx-auto">
+                        <div className="relative group">
+                            <div className="absolute -inset-4 bg-white rounded-xl shadow-sm opacity-100 transition-opacity -z-10 border border-slate-100" />
+                            <pre className="whitespace-pre-wrap font-mono text-base text-slate-800 leading-relaxed p-4 min-h-[320px]">
+                                {item.content}
+                            </pre>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            {/* Version History Footer (Collapsible or small) */}
-            {!isTemplate && versions.length > 0 && (
-                <div className="border-t border-slate-100 bg-white p-4">
-                    <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3 px-2">Recent Versions</h4>
-                    <div className="flex gap-3 overflow-x-auto pb-2 px-2">
-                        {versions.slice(0, 5).map(v => (
-                            <div key={v._id} className="flex-shrink-0 w-64 bg-[#fafaf9] p-3 rounded-lg border border-slate-200 shadow-sm text-xs group cursor-pointer hover:border-teal-300 transition-all">
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-slate-600">{new Date(v.timestamp).toLocaleString()}</span>
-                                    {onRestoreVersion && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onRestoreVersion(v); }}
-                                            className="text-teal-600 hover:bg-teal-50 p-1 rounded opacity-0 group-hover:opacity-100 transition-all"
-                                            title="Restore"
-                                        >
-                                            <RotateCcw size={12} />
-                                        </button>
-                                    )}
-                                </div>
-                                <p className="line-clamp-2 font-mono text-slate-700">{v.content}</p>
+                {/* Versions Panel */}
+                {!isTemplate && versions.length > 0 && (
+                    <aside
+                        className={`border-l border-slate-200 bg-white flex flex-col transition-all duration-200 overflow-hidden hidden lg:flex ${showVersions ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                        style={{ width: showVersions ? versionsPanelWidth : 0 }}
+                    >
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                <History size={16} />
+                                Versions
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                            <button
+                                onClick={() => setShowVersions(!showVersions)}
+                                className="text-xs uppercase tracking-wider text-teal-700 font-semibold"
+                            >
+                                {showVersions ? 'Hide' : 'Show'}
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {versions.slice(0, 8).map(v => (
+                                <div key={v._id} className="bg-[#fafaf9] p-3 rounded-lg border border-slate-200 shadow-sm text-xs group hover:border-teal-300">
+                                    <div className="flex justify-between items-center mb-2 text-[11px] text-slate-500">
+                                        <span>{new Date(v.timestamp).toLocaleString()}</span>
+                                        {onRestoreVersion && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onRestoreVersion(v); }}
+                                                className="text-teal-600 hover:bg-teal-50 p-1 rounded transition-all"
+                                                title="Restore"
+                                            >
+                                                <RotateCcw size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <pre className="font-mono text-slate-700 whitespace-pre-wrap">
+                                        {getDiffSnippet(v)}
+                                    </pre>
+                                </div>
+                            ))}
+                        </div>
+                    </aside>
+                )}
+            </div>
         </div>
     );
 };

@@ -2,11 +2,20 @@ import React from 'react';
 
 interface LayoutProps {
     children: React.ReactNode;
+    theme?: 'light' | 'dark';
+    focusMode?: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const Layout: React.FC<LayoutProps> = ({ children, theme = 'light', focusMode = false }) => {
+    const baseClasses = theme === 'dark'
+        ? 'bg-slate-950 text-slate-100 selection:bg-emerald-500/20 selection:text-emerald-100'
+        : 'bg-[#fafaf9] text-slate-900 selection:bg-teal-100 selection:text-teal-900';
+
     return (
-        <div className="flex h-screen w-full bg-[#fafaf9] overflow-hidden font-sans text-slate-900 selection:bg-teal-100 selection:text-teal-900">
+        <div
+            data-theme={theme}
+            className={`flex h-screen w-full overflow-hidden font-sans ${baseClasses} ${focusMode ? 'lg:pr-0' : ''}`}
+        >
             {children}
         </div>
     );
