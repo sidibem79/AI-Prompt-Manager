@@ -150,17 +150,21 @@ export const restoreVersion = mutation({
       throw new Error("Prompt or version not found");
     }
 
-    // Save current content as a version before restoring
-    await ctx.db.insert("versions", {
-      promptId: args.promptId,
-      content: prompt.content,
-      timestamp: Date.now(),
-    });
+    // Only create a version if content is actually different
+    if (prompt.content !== version.content) {
+      // Save current content as a version before restoring
+      await ctx.db.insert("versions", {
+        promptId: args.promptId,
+        content: prompt.content,
+        timestamp: Date.now(),
+      });
 
-    // Restore the version
-    await ctx.db.patch(args.promptId, {
-      content: version.content,
-      updatedAt: Date.now(),
-    });
+      // Restore the version
+      await ctx.db.patch(args.promptId, {
+        content: version.content,
+        updatedAt: Date.now(),
+      });
+    }
+    // If content is the same, do nothing (no version created, no patch needed)
   },
 });
