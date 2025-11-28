@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop ai-prompt-manager",
+    "pm2:restart": "pm2 restart ai-prompt-manager",
+    "pm2:logs": "pm2 logs ai-prompt-manager",
+    "pm2:status": "pm2 status",
+    "pm2:delete": "pm2 delete ai-prompt-manager"
   },
   "dependencies": {
     "convex": "^1.29.3",
@@ -17,6 +23,7 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "pm2": "^6.0.14",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
