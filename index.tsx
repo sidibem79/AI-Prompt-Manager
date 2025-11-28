@@ -51,7 +51,8 @@ const App = () => {
   const [isTaxonomyBusy, setIsTaxonomyBusy] = useState(false);
   const [lastAction, setLastAction] = useState<{ type: string; timestamp: number } | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(288);
-  const [listWidth, setListWidth] = useState(360);
+  const [listWidth, setListWidth] = useState(320);
+  const [listDensity, setListDensity] = useState<'comfortable' | 'compact'>('comfortable');
 
   // Editor State
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -216,7 +217,6 @@ const App = () => {
     setIsEditorOpen(true);
     setIsSidebarOpen(false);
   };
-
   const handleEdit = () => {
     if (!selectedItem) return;
     setEditorMode('edit');
@@ -418,6 +418,9 @@ const App = () => {
               onClearFilters={handleClearFilters}
               shortcutsEnabled={shortcutsEnabled}
               desktopWidth={listWidth}
+              onCreateNew={handleCreateNew}
+              density={listDensity}
+              onDensityChange={setListDensity}
             />
 
             <div
@@ -433,6 +436,7 @@ const App = () => {
               versions={currentPromptVersions}
               onRestoreVersion={handleRestoreVersion}
               lastAction={lastAction}
+              onCreateNew={handleCreateNew}
             />
           </div>
         </div>

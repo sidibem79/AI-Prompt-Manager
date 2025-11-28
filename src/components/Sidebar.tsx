@@ -10,6 +10,7 @@ import {
     X,
     Pencil
 } from 'lucide-react';
+import { getTagColor, hexToRgba } from '../utils/color';
 
 interface SidebarProps {
     viewMode: 'prompts' | 'templates';
@@ -33,6 +34,7 @@ interface SidebarProps {
     desktopWidth: number;
     onOpenTaxonomy: () => void;
     onRenameCategory: (from: string, to: string) => void;
+    onEditCategory?: (category: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -52,7 +54,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     onOpenSettings,
     onOpenTaxonomy,
     desktopWidth,
-    onRenameCategory
+    onRenameCategory,
+    onEditCategory
 }) => {
     const [tagsExpanded, setTagsExpanded] = useState(false);
     const [tagSearch, setTagSearch] = useState('');
@@ -68,6 +71,14 @@ const Sidebar: React.FC<SidebarProps> = ({
         [filteredTags, tagsExpanded]
     );
     const hasOverflowTags = tags.length > maxVisibleTags;
+    const tagChipStyles = (tag: string, active: boolean) => {
+        const color = getTagColor(tag);
+        return {
+            borderColor: hexToRgba(color, active ? 0.8 : 0.4),
+            backgroundColor: hexToRgba(color, active ? 0.35 : 0.15),
+            color
+        };
+    };
 
     return (
         <>
@@ -195,14 +206,22 @@ const Sidebar: React.FC<SidebarProps> = ({
                     {/* Tags Section */}
                     <div className="flex items-center justify-between text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">
                         <span>Tags</span>
-                        {hasOverflowTags && (
+                        <div className="flex items-center gap-2">
                             <button
-                                onClick={() => setTagsExpanded(!tagsExpanded)}
-                                className="text-[11px] font-semibold text-[#5eead4]"
+                                onClick={onOpenTaxonomy}
+                                className="text-[11px] tracking-wider text-slate-400 hover:text-white transition-colors"
                             >
-                                {tagsExpanded ? 'Show less' : 'Show more'}
+                                Manage
                             </button>
-                        )}
+                            {hasOverflowTags && (
+                                <button
+                                    onClick={() => setTagsExpanded(!tagsExpanded)}
+                                    className="text-[11px] font-semibold text-[#5eead4]"
+                                >
+                                    {tagsExpanded ? 'Show less' : 'Show more'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <div className="px-2 mb-2">
                         <input
@@ -217,10 +236,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                             <button
                                 key={tag}
                                 onClick={() => toggleTag(tag)}
-                                className={`text-xs px-2 py-1 rounded-full border transition-colors ${selectedTags.includes(tag)
-                                    ? 'bg-[#0d9488]/20 text-[#5eead4] border-[#0d9488]/30'
-                                    : 'bg-slate-800/50 text-slate-300 border-slate-700 hover:border-slate-600'
-                                    }`}
+                                className="text-xs px-2 py-1 rounded-full border transition-all shadow-sm"
+                                style={tagChipStyles(tag, selectedTags.includes(tag))}
                             >
                                 #{tag}
                             </button>
