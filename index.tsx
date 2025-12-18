@@ -11,6 +11,7 @@ import PromptDetail from './src/components/PromptDetail';
 import Editor from './src/components/Editor';
 import { ToastContainer, ConfirmDialog, SettingsPanel, TaxonomyManager } from './src/components/UI';
 import { Prompt, Template, ToastMessage, ToastVariant, Version } from './src/types';
+import { X } from 'lucide-react';
 
 const App = () => {
   // --- Data ---
@@ -69,17 +70,15 @@ const App = () => {
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
-      document.body.style.backgroundColor = theme === 'dark' ? '#020617' : '#fafaf9';
+      document.body.style.backgroundColor = theme === 'dark' ? '#020617' : '#f1f5f9';
     }
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pm-theme', theme);
-    }
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('pm-theme', theme);
   }, [theme]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pm-font-size', fontSize);
-    }
+    if (typeof window === 'undefined') return;
+    localStorage.setItem('pm-font-size', fontSize);
   }, [fontSize]);
 
   useEffect(() => {
@@ -92,6 +91,7 @@ const App = () => {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isSidebarOpen]);
+
   useEffect(() => {
     return () => {
       dragTypeRef.current = null;
@@ -99,6 +99,7 @@ const App = () => {
       document.body.style.userSelect = '';
     };
   }, []);
+
   useEffect(() => {
     sidebarWidthRef.current = sidebarWidth;
   }, [sidebarWidth]);
@@ -121,11 +122,13 @@ const App = () => {
     counts['All'] = itemsForView.length;
     return counts;
   }, [itemsForView, categories]);
+
   const sidebarCounts = useMemo(() => ({
     prompts: prompts.length,
     templates: templates.length,
     categories: categoryCounts
   }), [prompts.length, templates.length, categoryCounts]);
+
   const shortcutsEnabled = !isEditorOpen;
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -159,8 +162,9 @@ const App = () => {
 
   const filteredItems = useMemo(() => {
     return itemsForView.filter(item => {
+      const title = 'title' in item ? item.title : item.label;
       const matchesSearch = (
-        ('title' in item ? item.title : item.label).toLowerCase().includes(searchQuery.toLowerCase()) ||
+        title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.content.toLowerCase().includes(searchQuery.toLowerCase())
       );
       const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
@@ -376,70 +380,68 @@ const App = () => {
   return (
     <Layout theme={theme} focusMode={isEditorOpen}>
       <div className="flex w-full h-full overflow-hidden">
-        <Sidebar
-          viewMode={viewMode}
-          setViewMode={handleViewModeChange}
-          categories={categories}
-          selectedCategory={selectedCategory}
-          setSelectedCategory={setSelectedCategory}
-          tags={allTags}
-          selectedTags={selectedTags}
-          toggleTag={toggleTag}
-          onNewPrompt={handleCreateNew}
-          onNewTemplate={handleCreateNew}
-          counts={sidebarCounts}
-          isMobileOpen={isSidebarOpen}
-          onToggleMobile={() => setIsSidebarOpen(prev => !prev)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenTaxonomy={() => setIsTaxonomyOpen(true)}
-          desktopWidth={sidebarWidth}
-          onEditCategory={(category) => { setTaxonomyPresetCategory(category); setIsTaxonomyOpen(true); }}
-        />
-
-        <div
-          className="hidden lg:block w-2 cursor-col-resize bg-slate-200/0 hover:bg-slate-200/60 transition-colors"
-          onMouseDown={startResize('sidebar')}
-        />
-
-        <div className="flex-1 flex flex-col lg:ml-0 overflow-hidden">
-          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
-            <PromptList
-              items={filteredItems}
-              selectedId={selectedId}
-              onSelect={(item) => { setSelectedId(item._id); setIsSidebarOpen(false); }}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              viewMode={viewMode}
-              searchInputRef={searchInputRef}
-              selectedCategory={selectedCategory}
-              selectedTags={selectedTags}
-              onCategoryReset={handleCategoryReset}
-              onRemoveTag={handleRemoveTag}
-              onClearFilters={handleClearFilters}
-              shortcutsEnabled={shortcutsEnabled}
-              desktopWidth={listWidth}
-              onCreateNew={handleCreateNew}
-              density={listDensity}
-              onDensityChange={setListDensity}
-            />
-
-            <div
-              className="hidden lg:block w-2 cursor-col-resize bg-slate-200/0 hover:bg-slate-200/60 transition-colors"
-              onMouseDown={startResize('list')}
-            />
-
-            <PromptDetail
-              item={selectedItem}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onCopy={handleCopy}
-              versions={currentPromptVersions}
-              onRestoreVersion={handleRestoreVersion}
-              lastAction={lastAction}
-              onCreateNew={handleCreateNew}
-            />
-          </div>
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#fafaf9]">
+          <PromptList
+            items={filteredItems}
+            selectedId={selectedId}
+            onSelect={(item) => { setSelectedId(item._id); }}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            viewMode={viewMode}
+            setViewMode={handleViewModeChange}
+            searchInputRef={searchInputRef}
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+            categories={categories}
+            selectedTags={selectedTags}
+            allTags={allTags}
+            toggleTag={toggleTag}
+            onCategoryReset={handleCategoryReset}
+            onRemoveTag={handleRemoveTag}
+            onClearFilters={handleClearFilters}
+            shortcutsEnabled={shortcutsEnabled}
+            onCreateNew={handleCreateNew}
+            density={listDensity}
+            onDensityChange={setListDensity}
+            counts={sidebarCounts}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenTaxonomy={() => setIsTaxonomyOpen(true)}
+          />
         </div>
+
+        {selectedId && selectedItem && !isEditorOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 lg:p-8">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200"
+              onClick={() => setSelectedId(null)}
+            />
+
+            {/* Modal Content */}
+            <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+              <button
+                onClick={() => setSelectedId(null)}
+                className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+                aria-label="Close detail view"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <PromptDetail
+                  item={selectedItem}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                  onCopy={handleCopy}
+                  versions={currentPromptVersions}
+                  onRestoreVersion={handleRestoreVersion}
+                  lastAction={lastAction}
+                  onCreateNew={handleCreateNew}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {isEditorOpen && (

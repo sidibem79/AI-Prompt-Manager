@@ -163,21 +163,50 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-8 py-8 custom-scrollbar scroll-smooth">
                 <div className="max-w-4xl mx-auto space-y-8">
                     {/* Header */}
-                    <div className="flex justify-between items-start gap-4">
-                        <div className="space-y-4 flex-1">
-                            <div className="flex items-center gap-2 group">
+                    <div className="space-y-4">
+                        {/* Row 1: Title and Created Date */}
+                        <div className="flex justify-between items-start gap-4">
+                            <div className="flex items-center gap-2 group flex-1">
                                 <FileText className="text-slate-400" size={28} />
                                 <h1 className="text-3xl font-bold text-slate-900 tracking-tight leading-tight">
                                     {previewVersion ? `(History) ${title}` : title}
                                 </h1>
                             </div>
-                            <div className="flex items-center gap-2 text-slate-500 font-bold uppercase tracking-wider text-sm">
+                            <div className="text-right whitespace-nowrap pt-2">
+                                <p className="text-slate-400 text-sm">Created {creationDate}</p>
+                            </div>
+                        </div>
+
+                        {/* Row 2: Category and Header Buttons */}
+                        <div className="flex justify-between items-center gap-4">
+                            <div className="flex items-center gap-2 text-slate-900 font-bold uppercase tracking-wider text-sm">
                                 <FileText size={16} />
                                 <span>{item.category}</span>
                             </div>
-                        </div>
-                        <div className="text-right whitespace-nowrap">
-                            <p className="text-slate-400 text-sm">Created {creationDate}</p>
+                            <div className="flex justify-end gap-2 pr-1">
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        onCopy(previewVersion ? previewVersion.content : item.content);
+                                    }}
+                                    type="button"
+                                    title="Copy Prompt"
+                                    className="p-2 bg-teal-50 text-teal-600 rounded-lg hover:bg-teal-100 transition-all border border-teal-100"
+                                >
+                                    <Copy size={16} />
+                                </button>
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        onEdit();
+                                    }}
+                                    type="button"
+                                    title="Edit Prompt"
+                                    className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-100 transition-all border border-slate-100"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -220,10 +249,9 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                                     return (
                                         <span
                                             key={tag}
-                                            className="px-3 py-1 rounded-full text-xs font-bold"
+                                            className="px-3 py-1 rounded-full text-xs font-bold text-slate-900"
                                             style={{
                                                 backgroundColor: hexToRgba(color, 0.2),
-                                                color: color,
                                                 border: `1px solid ${hexToRgba(color, 0.4)}`
                                             }}
                                         >
