@@ -423,7 +423,7 @@ const App = () => {
     <Layout theme={theme} focusMode={isEditorOpen}>
       <div className="flex w-full h-full overflow-hidden">
         {/* Main list area */}
-        <div className={`flex-1 flex flex-col overflow-hidden bg-[#fafaf9] dark:bg-slate-950 transition-[margin] duration-300 ${selectedId && selectedItem && !isEditorOpen ? 'lg:mr-[45%]' : ''}`}>
+        <div className={`flex-1 flex flex-col overflow-hidden bg-[#fafaf9] dark:bg-slate-950 transition-[margin,opacity] duration-300 ${selectedId && selectedItem && !isEditorOpen ? 'lg:mr-[55%] lg:opacity-95' : ''}`}>
           <PromptList
             items={filteredItems}
             selectedId={selectedId}
@@ -489,7 +489,7 @@ const App = () => {
             </div>
 
             {/* Desktop: side panel */}
-            <div className="hidden lg:flex fixed right-0 top-0 bottom-0 w-[45%] z-40 bg-white border-l border-slate-200 shadow-xl animate-in slide-in-from-right duration-300 flex-col">
+            <div className="hidden lg:flex fixed right-0 top-0 bottom-0 w-[55%] max-w-[920px] z-40 bg-white border-l border-slate-200 shadow-xl animate-in slide-in-from-right duration-300 flex-col">
               <button
                 onClick={() => setSelectedId(null)}
                 className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"

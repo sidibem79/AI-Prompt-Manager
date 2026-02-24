@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { Search, LayoutTemplate, FileText, XCircle, X, Plus, Sparkles } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Search, LayoutTemplate, FileText, X, Plus, Sparkles, SlidersHorizontal } from 'lucide-react';
 import { Prompt, Template } from '../types';
 import { getTagColor, hexToRgba } from '../utils/color';
 
@@ -33,16 +33,6 @@ interface PromptListProps {
     onOpenSettings: () => void;
     onOpenTaxonomy: () => void;
     isLoading?: boolean;
-}
-
-// Debounce hook
-function useDebouncedValue<T>(value: T, delay: number): T {
-    const [debounced, setDebounced] = useState(value);
-    useEffect(() => {
-        const timer = setTimeout(() => setDebounced(value), delay);
-        return () => clearTimeout(timer);
-    }, [value, delay]);
-    return debounced;
 }
 
 // Skeleton card for loading state
@@ -117,7 +107,10 @@ const PromptList: React.FC<PromptListProps> = ({
     isLoading = false
 }) => {
     const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'alphabetical'>('newest');
+    const [showAllTags, setShowAllTags] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(selectedCategory !== 'All' || selectedTags.length > 0);
     const gridRef = useRef<HTMLDivElement>(null);
+    const TAG_PREVIEW_LIMIT = 10;
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -157,97 +150,175 @@ const PromptList: React.FC<PromptListProps> = ({
     };
 
     const hasActiveFilters = selectedCategory !== 'All' || selectedTags.length > 0 || searchQuery.trim() !== '';
+    const hasTagSelections = selectedTags.length > 0;
+    const activeFilterCount = selectedTags.length;
+    const visibleTags = showAllTags ? allTags : allTags.slice(0, TAG_PREVIEW_LIMIT);
+    const hasHiddenTags = allTags.length > TAG_PREVIEW_LIMIT;
 
     return (
         <div className="flex flex-col h-full w-full max-w-[1400px] mx-auto px-4 lg:px-8 py-6">
-            {/* Search Bar */}
-            <div className="relative mb-6">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} aria-hidden="true" />
-                <input
-                    ref={searchInputRef}
-                    type="search"
-                    name="search"
-                    autoComplete="off"
-                    placeholder="Search prompts\u2026"
-                    aria-label="Search prompts"
-                    value={searchQuery}
-                    onChange={(e) => onSearchChange(e.target.value)}
-                    className="w-full pl-12 pr-10 py-3 rounded-xl border border-slate-200 bg-white focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:border-transparent outline-none text-base shadow-sm transition-shadow"
-                />
-                {searchQuery && (
-                    <button
-                        onClick={() => onSearchChange('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
-                        aria-label="Clear search"
-                    >
-                        <X size={16} />
-                    </button>
-                )}
-            </div>
+            {/* Top controls */}
+            <div className="mb-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="relative w-full sm:w-[280px] lg:w-[320px] xl:w-[360px]">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} aria-hidden="true" />
+                        <input
+                            ref={searchInputRef}
+                            type="search"
+                            name="search"
+                            autoComplete="off"
+                            placeholder="Search prompts..."
+                            aria-label="Search prompts"
+                            value={searchQuery}
+                            onChange={(e) => onSearchChange(e.target.value)}
+                            className="h-8 w-full pl-8 pr-7 rounded-lg border border-slate-200 bg-white focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:border-transparent outline-none text-sm shadow-sm transition-shadow"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => onSearchChange('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                                aria-label="Clear search"
+                            >
+                                <X size={12} />
+                            </button>
+                        )}
+                    </div>
 
-            {/* Filter Chips & Actions Row */}
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-                <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Category filters">
-                    {categories.map(cat => (
-                        <button
-                            key={cat}
-                            onClick={() => setSelectedCategory(cat)}
-                            aria-pressed={selectedCategory === cat}
-                            className={`px-4 py-1.5 rounded-full border text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none ${getCategoryStyles(cat, selectedCategory === cat)}`}
-                        >
-                            {cat}
-                            {counts.categories[cat] !== undefined && (
-                                <span className="ml-1.5 text-xs opacity-60 tabular-nums">{counts.categories[cat]}</span>
-                            )}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <label htmlFor="sort-select" className="text-sm text-slate-500 font-medium">Sort By</label>
+                    <div className="flex items-center gap-2 ml-auto">
+                        <label htmlFor="sort-select" className="text-xs text-slate-500 font-medium hidden sm:block">Sort</label>
                         <select
                             id="sort-select"
                             name="sortBy"
                             value={sortBy}
                             onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest' | 'alphabetical')}
-                            className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                            className="h-8 bg-white border border-slate-200 rounded-lg px-2.5 text-sm focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
                         >
                             <option value="newest">Newest</option>
                             <option value="oldest">Oldest</option>
-                            <option value="alphabetical">Alphabetical</option>
+                            <option value="alphabetical">A-Z</option>
                         </select>
                     </div>
 
                     <button
-                        onClick={onCreateNew}
-                        className="flex items-center gap-2 bg-[#0d9488] hover:bg-teal-700 text-white px-6 py-2 rounded-lg font-semibold transition-colors shadow-sm active:scale-95 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 outline-none"
+                        onClick={() => setFiltersOpen((value) => !value)}
+                        aria-expanded={filtersOpen}
+                        aria-controls="filters-panel"
+                        className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
                     >
-                        <Plus size={18} aria-hidden="true" />
+                        <SlidersHorizontal size={14} aria-hidden="true" />
+                        Tags
+                        {activeFilterCount > 0 && (
+                            <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center rounded-full bg-teal-100 text-teal-700 text-[11px] font-bold">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </button>
+
+                    <button
+                        onClick={onCreateNew}
+                        className="h-8 inline-flex items-center gap-1.5 bg-[#0d9488] hover:bg-teal-700 text-white px-3 rounded-lg font-semibold text-sm transition-colors shadow-sm active:scale-95 focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 outline-none"
+                    >
+                        <Plus size={13} aria-hidden="true" />
                         <span className="hidden sm:inline">Create New Prompt</span>
                         <span className="sm:hidden">New</span>
                     </button>
                 </div>
-            </div>
 
-            {/* Tags Row */}
-            {allTags.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 mb-8" role="group" aria-label="Tag filters">
-                    {allTags.map(tag => (
+                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Category filters">
+                    {categories.map(cat => (
                         <button
-                            key={tag}
-                            onClick={() => toggleTag(tag)}
-                            aria-pressed={selectedTags.includes(tag)}
-                            className={`px-3 py-1 rounded-full border text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none ${selectedTags.includes(tag)
-                                ? "bg-teal-50 text-slate-900 border-teal-200"
-                                : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
-                                }`}
+                            key={cat}
+                            onClick={() => setSelectedCategory(cat)}
+                            aria-pressed={selectedCategory === cat}
+                            className={`px-2.5 py-0.5 rounded-full border text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none ${getCategoryStyles(cat, selectedCategory === cat)}`}
                         >
-                            #{tag}
+                            {cat}
+                            {counts.categories[cat] !== undefined && (
+                                <span className="ml-1 text-[10px] opacity-60 tabular-nums">{counts.categories[cat]}</span>
+                            )}
                         </button>
                     ))}
                 </div>
-            )}
+
+                {hasTagSelections && !filtersOpen && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        {selectedTags.slice(0, 4).map(tag => (
+                            <button
+                                key={`collapsed-${tag}`}
+                                onClick={() => onRemoveTag(tag)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-teal-200 bg-teal-50 text-slate-900 focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                                aria-label={`Remove tag ${tag}`}
+                            >
+                                #{tag}
+                                <X size={11} aria-hidden="true" />
+                            </button>
+                        ))}
+                        {selectedTags.length > 4 && (
+                            <span className="text-xs text-slate-500">+{selectedTags.length - 4} more</span>
+                        )}
+                        <button
+                            onClick={onClearFilters}
+                            className="text-xs text-teal-600 hover:text-teal-700 font-medium px-1.5 py-0.5 rounded focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                )}
+
+                {filtersOpen && (
+                    <div id="filters-panel" className="rounded-lg border border-slate-200 bg-white p-2.5 space-y-2">
+                        {allTags.length > 0 && (
+                            <>
+                                {selectedTags.length > 0 && (
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        {selectedTags.map(tag => (
+                                            <button
+                                                key={`selected-${tag}`}
+                                                onClick={() => onRemoveTag(tag)}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border border-teal-200 bg-teal-50 text-slate-900 focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                                                aria-label={`Remove tag ${tag}`}
+                                            >
+                                                #{tag}
+                                                <X size={11} aria-hidden="true" />
+                                            </button>
+                                        ))}
+                                        <button
+                                            onClick={() => selectedTags.forEach(onRemoveTag)}
+                                            className="text-xs text-slate-500 hover:text-slate-700 font-medium px-1.5 py-0.5"
+                                        >
+                                            Clear selected
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Tag filters">
+                                    {visibleTags.map(tag => (
+                                        <button
+                                            key={tag}
+                                            onClick={() => toggleTag(tag)}
+                                            aria-pressed={selectedTags.includes(tag)}
+                                            className={`px-2.5 py-0.5 rounded-full border text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none ${selectedTags.includes(tag)
+                                                ? "bg-teal-50 text-slate-900 border-teal-200"
+                                                : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                                                }`}
+                                        >
+                                            #{tag}
+                                        </button>
+                                    ))}
+                                    {hasHiddenTags && (
+                                        <button
+                                            onClick={() => setShowAllTags((value) => !value)}
+                                            className="px-2.5 py-0.5 rounded-full border border-slate-200 bg-white text-xs font-medium text-teal-700 hover:border-slate-300 focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                                        >
+                                            {showAllTags ? 'Less tags' : `Show all (${allTags.length})`}
+                                        </button>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Result count */}
             {hasActiveFilters && (
@@ -268,7 +339,7 @@ const PromptList: React.FC<PromptListProps> = ({
             {/* Grid */}
             <div ref={gridRef} className="flex-1 overflow-y-auto min-h-0 pb-12 custom-scrollbar">
                 {isLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
                         {Array.from({ length: 8 }).map((_, i) => (
                             <SkeletonCard key={i} />
                         ))}
@@ -309,7 +380,7 @@ const PromptList: React.FC<PromptListProps> = ({
                         )}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
                         {sortedItems.map(item => {
                             const isSelected = selectedId === item._id;
                             const isTemplate = 'label' in item;
@@ -379,11 +450,6 @@ const PromptList: React.FC<PromptListProps> = ({
                 )}
             </div>
 
-            {/* Keyboard hints */}
-            <div className="hidden lg:flex items-center justify-center gap-4 py-2 text-[11px] text-slate-400">
-                <span><kbd className="px-1.5 py-0.5 rounded border border-slate-200 bg-white text-slate-500 font-mono">Ctrl+K</kbd> Search</span>
-                <span><kbd className="px-1.5 py-0.5 rounded border border-slate-200 bg-white text-slate-500 font-mono">Ctrl+N</kbd> New prompt</span>
-            </div>
         </div>
     );
 };
