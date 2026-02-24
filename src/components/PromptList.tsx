@@ -337,9 +337,9 @@ const PromptList: React.FC<PromptListProps> = ({
             )}
 
             {/* Grid */}
-            <div ref={gridRef} className="flex-1 overflow-y-auto min-h-0 pb-12 custom-scrollbar">
+            <div ref={gridRef} className="@container flex-1 overflow-y-auto min-h-0 pb-12 custom-scrollbar">
                 {isLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3 @6xl:grid-cols-4 gap-6">
                         {Array.from({ length: 8 }).map((_, i) => (
                             <SkeletonCard key={i} />
                         ))}
@@ -380,7 +380,7 @@ const PromptList: React.FC<PromptListProps> = ({
                         )}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 @md:grid-cols-2 @3xl:grid-cols-3 @6xl:grid-cols-4 gap-6">
                         {sortedItems.map(item => {
                             const isSelected = selectedId === item._id;
                             const isTemplate = 'label' in item;

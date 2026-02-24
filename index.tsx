@@ -80,6 +80,10 @@ const App = () => {
   const [lastAction, setLastAction] = useState<{ type: string; timestamp: number } | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(288);
   const [listWidth, setListWidth] = useState(320);
+  const [detailSplit, setDetailSplit] = useState(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('pm-detail-split') : null;
+    return saved ? Number(saved) : 55;
+  });
   const [listDensity, setListDensity] = useState<'comfortable' | 'compact'>('comfortable');
 
   // Editor State
@@ -91,9 +95,10 @@ const App = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [confirmState, setConfirmState] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const dragTypeRef = useRef<'sidebar' | 'list' | null>(null);
+  const dragTypeRef = useRef<'sidebar' | 'list' | 'detail' | null>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
   const listWidthRef = useRef(listWidth);
+  const detailSplitRef = useRef(detailSplit);
 
   // --- URL sync ---
   useEffect(() => {
@@ -145,6 +150,11 @@ const App = () => {
     listWidthRef.current = listWidth;
   }, [listWidth]);
 
+  useEffect(() => {
+    detailSplitRef.current = detailSplit;
+    if (typeof window !== 'undefined') localStorage.setItem('pm-detail-split', String(detailSplit));
+  }, [detailSplit]);
+
   // --- Derived Data ---
   const categories = useMemo(() => ['All', ...allCategories], [allCategories]);
   const itemsForView = viewMode === 'prompts' ? prompts : templates;
@@ -170,7 +180,7 @@ const App = () => {
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-  const startResize = (type: 'sidebar' | 'list') => (event: React.MouseEvent) => {
+  const startResize = (type: 'sidebar' | 'list' | 'detail') => (event: React.MouseEvent) => {
     if (window.innerWidth < 1024) return;
     event.preventDefault();
     dragTypeRef.current = type;
@@ -180,6 +190,9 @@ const App = () => {
       } else if (dragTypeRef.current === 'list') {
         const newWidth = clamp(e.clientX - sidebarWidthRef.current - 8, 260, 560);
         setListWidth(newWidth);
+      } else if (dragTypeRef.current === 'detail') {
+        const pct = 100 - (e.clientX / window.innerWidth) * 100;
+        setDetailSplit(clamp(pct, 30, 75));
       }
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
@@ -424,7 +437,10 @@ const App = () => {
     <Layout theme={theme} focusMode={isEditorOpen}>
       <div className="flex w-full h-full overflow-hidden">
         {/* Main list area */}
-        <div className={`flex-1 flex flex-col overflow-hidden bg-[#fafaf9] dark:bg-slate-950 transition-[margin,opacity] duration-300 ${selectedId && selectedItem && !isEditorOpen ? 'lg:mr-[55%] lg:opacity-95' : ''}`}>
+        <div
+          className="flex-1 flex flex-col overflow-hidden bg-[#fafaf9] dark:bg-slate-950 min-w-0"
+          style={selectedId && selectedItem && !isEditorOpen ? { flex: `0 0 ${100 - detailSplit}%` } : undefined}
+        >
           <PromptList
             items={filteredItems}
             selectedId={selectedId}
@@ -454,7 +470,7 @@ const App = () => {
           />
         </div>
 
-        {/* Detail side panel (slides in from right) */}
+        {/* Detail side panel */}
         {selectedId && selectedItem && !isEditorOpen && (
           <>
             {/* Mobile: modal overlay */}
@@ -489,15 +505,22 @@ const App = () => {
               </div>
             </div>
 
-            {/* Desktop: side panel */}
-            <div className="hidden lg:flex fixed right-0 top-0 bottom-0 w-[55%] max-w-[920px] z-40 bg-white border-l border-slate-200 shadow-xl animate-in slide-in-from-right duration-300 flex-col">
-              <button
-                onClick={() => setSelectedId(null)}
-                className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
-                aria-label="Close detail panel"
-              >
-                <X size={20} />
-              </button>
+            {/* Desktop: resizable drag handle */}
+            <div
+              className="hidden lg:flex items-center justify-center w-1.5 cursor-col-resize group hover:bg-teal-100 active:bg-teal-200 transition-colors shrink-0 relative z-10"
+              onMouseDown={startResize('detail')}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize panels"
+            >
+              <div className="w-0.5 h-8 rounded-full bg-slate-300 group-hover:bg-teal-500 group-active:bg-teal-600 transition-colors" />
+            </div>
+
+            {/* Desktop: side panel (inline flex sibling) */}
+            <div
+              className="hidden lg:flex flex-col overflow-hidden bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 min-w-0"
+              style={{ flex: `0 0 ${detailSplit}%` }}
+            >
               <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <PromptDetail
                   item={selectedItem}

@@ -204,14 +204,29 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                             </h1>
                         </div>
                         {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700">
                                 {item.category || 'Other'}
                             </span>
-                            <span className="text-xs text-slate-400 tabular-nums">Created {creationDate}</span>
+                            {item.tags.map(tag => {
+                                const color = getTagColor(tag);
+                                return (
+                                    <span
+                                        key={tag}
+                                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                                        style={{
+                                            backgroundColor: hexToRgba(color, 0.15),
+                                            border: `1px solid ${hexToRgba(color, 0.35)}`,
+                                            color: color
+                                        }}
+                                    >
+                                        #{tag}
+                                    </span>
+                                );
+                            })}
+                            <span className="text-xs text-slate-400 tabular-nums">Updated {updatedDate}</span>
                         </div>
                     </div>
-                    <span className="text-xs text-slate-400 tabular-nums self-start">Updated {updatedDate}</span>
                 </div>
 
                 <div className="mt-3 flex items-center gap-2">
