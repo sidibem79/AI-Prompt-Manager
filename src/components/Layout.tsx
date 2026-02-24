@@ -15,6 +15,7 @@ const Layout: React.FC<LayoutProps> = ({ children, theme = 'light', focusMode = 
         <div
             data-theme={theme}
             className={`flex h-screen w-full overflow-hidden font-sans ${baseClasses} ${focusMode ? 'lg:pr-0' : ''}`}
+            style={{ colorScheme: theme }}
         >
             {children}
         </div>

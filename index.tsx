@@ -13,12 +13,37 @@ import { ToastContainer, ConfirmDialog, SettingsPanel, TaxonomyManager } from '.
 import { Prompt, Template, ToastMessage, ToastVariant, Version } from './src/types';
 import { X } from 'lucide-react';
 
+// --- URL State helpers ---
+function getUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    view: (params.get('view') as 'prompts' | 'templates') || 'prompts',
+    category: params.get('category') || 'All',
+    search: params.get('q') || '',
+    id: params.get('id') || null,
+  };
+}
+
+function setUrlParams(state: { view: string; category: string; search: string; id: string | null }) {
+  const params = new URLSearchParams();
+  if (state.view !== 'prompts') params.set('view', state.view);
+  if (state.category !== 'All') params.set('category', state.category);
+  if (state.search) params.set('q', state.search);
+  if (state.id) params.set('id', state.id);
+  const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+  window.history.replaceState(null, '', newUrl);
+}
+
 const App = () => {
   // --- Data ---
-  const prompts = useQuery(api.prompts.list) ?? [];
-  const templates = useQuery(api.templates.list) ?? [];
+  const rawPrompts = useQuery(api.prompts.list);
+  const rawTemplates = useQuery(api.templates.list);
   const allCategories = useQuery(api.prompts.getCategories) ?? [];
   const allTags = useQuery(api.prompts.getTags) ?? [];
+
+  const prompts = rawPrompts ?? [];
+  const templates = rawTemplates ?? [];
+  const isLoading = rawPrompts === undefined || rawTemplates === undefined;
 
   // --- Mutations ---
   const createPrompt = useMutation(api.prompts.create);
@@ -30,13 +55,14 @@ const App = () => {
   const updateTemplate = useMutation(api.templates.update);
   const deleteTemplate = useMutation(api.templates.remove);
 
-  // --- State ---
-  const [viewMode, setViewMode] = useState<'prompts' | 'templates'>('prompts');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  // --- State (initialized from URL) ---
+  const urlState = useMemo(() => getUrlParams(), []);
+  const [viewMode, setViewMode] = useState<'prompts' | 'templates'>(urlState.view);
+  const [selectedCategory, setSelectedCategory] = useState<string>(urlState.category);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(urlState.search);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(urlState.id);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window === 'undefined') return 'light';
     return (localStorage.getItem('pm-theme') as 'light' | 'dark') || 'light';
@@ -68,8 +94,14 @@ const App = () => {
   const sidebarWidthRef = useRef(sidebarWidth);
   const listWidthRef = useRef(listWidth);
 
+  // --- URL sync ---
+  useEffect(() => {
+    setUrlParams({ view: viewMode, category: selectedCategory, search: searchQuery, id: selectedId });
+  }, [viewMode, selectedCategory, searchQuery, selectedId]);
+
   useEffect(() => {
     if (typeof document !== 'undefined') {
+      document.documentElement.dataset.theme = theme;
       document.body.style.backgroundColor = theme === 'dark' ? '#020617' : '#f1f5f9';
     }
     if (typeof window === 'undefined') return;
@@ -81,16 +113,20 @@ const App = () => {
     localStorage.setItem('pm-font-size', fontSize);
   }, [fontSize]);
 
+  // Global Escape key handler for detail panel
   useEffect(() => {
-    if (!isSidebarOpen) return;
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsSidebarOpen(false);
+        if (isSidebarOpen) {
+          setIsSidebarOpen(false);
+        } else if (selectedId && !isEditorOpen) {
+          setSelectedId(null);
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isSidebarOpen]);
+  }, [isSidebarOpen, selectedId, isEditorOpen]);
 
   useEffect(() => {
     return () => {
@@ -201,6 +237,7 @@ const App = () => {
   const handleClearFilters = () => {
     setSelectedCategory('All');
     setSelectedTags([]);
+    setSearchQuery('');
   };
 
   const handleRemoveTag = (tag: string) => {
@@ -302,6 +339,11 @@ const App = () => {
     }
   };
 
+  // Confirmation helper passed to PromptDetail for version restore
+  const handleRequestConfirm = (message: string, onConfirm: () => void) => {
+    setConfirmState({ message, onConfirm: () => { onConfirm(); setConfirmState(null); } });
+  };
+
   const updatePromptRecord = (prompt: Prompt, patch: Partial<Pick<Prompt, 'category' | 'tags' | 'title' | 'content'>>) => {
     return updatePrompt({
       id: prompt._id as Id<"prompts">,
@@ -380,7 +422,8 @@ const App = () => {
   return (
     <Layout theme={theme} focusMode={isEditorOpen}>
       <div className="flex w-full h-full overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#fafaf9]">
+        {/* Main list area */}
+        <div className={`flex-1 flex flex-col overflow-hidden bg-[#fafaf9] dark:bg-slate-950 transition-[margin] duration-300 ${selectedId && selectedItem && !isEditorOpen ? 'lg:mr-[45%]' : ''}`}>
           <PromptList
             items={filteredItems}
             selectedId={selectedId}
@@ -406,27 +449,54 @@ const App = () => {
             counts={sidebarCounts}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenTaxonomy={() => setIsTaxonomyOpen(true)}
+            isLoading={isLoading}
           />
         </div>
 
+        {/* Detail side panel (slides in from right) */}
         {selectedId && selectedItem && !isEditorOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 lg:p-8">
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200"
-              onClick={() => setSelectedId(null)}
-            />
+          <>
+            {/* Mobile: modal overlay */}
+            <div className="lg:hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+                onClick={() => setSelectedId(null)}
+                role="presentation"
+              />
+              <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                <button
+                  onClick={() => setSelectedId(null)}
+                  className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                  aria-label="Close detail view"
+                >
+                  <X size={20} />
+                </button>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                  <PromptDetail
+                    item={selectedItem}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onCopy={handleCopy}
+                    versions={currentPromptVersions}
+                    onRestoreVersion={handleRestoreVersion}
+                    lastAction={lastAction}
+                    onCreateNew={handleCreateNew}
+                    onBack={() => setSelectedId(null)}
+                    onRequestConfirm={handleRequestConfirm}
+                  />
+                </div>
+              </div>
+            </div>
 
-            {/* Modal Content */}
-            <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Desktop: side panel */}
+            <div className="hidden lg:flex fixed right-0 top-0 bottom-0 w-[45%] z-40 bg-white border-l border-slate-200 shadow-xl animate-in slide-in-from-right duration-300 flex-col">
               <button
                 onClick={() => setSelectedId(null)}
-                className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
-                aria-label="Close detail view"
+                className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm border border-slate-100 text-slate-500 hover:text-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                aria-label="Close detail panel"
               >
                 <X size={20} />
               </button>
-
               <div className="flex-1 overflow-y-auto custom-scrollbar">
                 <PromptDetail
                   item={selectedItem}
@@ -437,10 +507,12 @@ const App = () => {
                   onRestoreVersion={handleRestoreVersion}
                   lastAction={lastAction}
                   onCreateNew={handleCreateNew}
+                  onBack={() => setSelectedId(null)}
+                  onRequestConfirm={handleRequestConfirm}
                 />
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 

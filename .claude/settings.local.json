@@ -22,7 +22,8 @@
       "Bash(pm2 status:*)",
       "Bash(mkdir:*)",
       "Bash(tasklist:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

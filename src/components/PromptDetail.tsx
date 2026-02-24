@@ -27,6 +27,7 @@ interface PromptDetailProps {
     lastAction?: { type: string; timestamp: number } | null;
     onCreateNew?: () => void;
     onBack?: () => void;
+    onRequestConfirm?: (message: string, onConfirm: () => void) => void;
 }
 
 const PromptContent: React.FC<{ content: string }> = ({ content }) => {
@@ -35,8 +36,6 @@ const PromptContent: React.FC<{ content: string }> = ({ content }) => {
     return (
         <div className="bg-[#0a1e29] border border-[#1a2e39] rounded-xl p-6 font-mono text-sm leading-relaxed shadow-lg">
             {lines.map((line, i) => {
-                // Simple regex for basic syntax highlighting
-                // Match # Headers
                 if (line.startsWith('# ')) {
                     return (
                         <div key={i} className="mb-2">
@@ -45,7 +44,6 @@ const PromptContent: React.FC<{ content: string }> = ({ content }) => {
                     );
                 }
 
-                // Match **bold**
                 const parts = line.split(/(\*\*.*?\*\*)/g);
                 return (
                     <div key={i} className="min-h-[1.25rem]">
@@ -75,7 +73,8 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
     onRestoreVersion,
     lastAction,
     onCreateNew,
-    onBack
+    onBack,
+    onRequestConfirm
 }) => {
     const [detailTab, setDetailTab] = useState<'content' | 'history'>('content');
     const [previewVersion, setPreviewVersion] = useState<Version | null>(null);
@@ -90,19 +89,15 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
         setDetailTab('content');
     }, [itemIdentifier]);
 
-    // Snapshot scroll position before re-render, then restore it
-    // Actually, setting state shouldn't scroll unless something else is happening.
-    // Let's ensure the event is fully handled.
-
     if (!item) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 text-slate-600 p-8 h-full">
                 <div className="max-w-md w-full text-center space-y-6">
                     <div className="w-20 h-20 mx-auto rounded-3xl bg-teal-100 text-teal-600 flex items-center justify-center shadow-sm">
-                        <Sparkles size={36} />
+                        <Sparkles size={36} aria-hidden="true" />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-bold text-slate-900">No prompt selected</h2>
+                        <h2 className="text-2xl font-bold text-slate-900" style={{ textWrap: 'balance' } as React.CSSProperties}>No prompt selected</h2>
                         <p className="text-slate-500 mt-2">
                             Pick a prompt from the sidebar or create a new one to get started.
                         </p>
@@ -110,7 +105,7 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                     <button
                         onClick={onCreateNew}
                         type="button"
-                        className="px-6 py-3 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700 transition-all shadow-md"
+                        className="px-6 py-3 rounded-xl bg-teal-600 text-white font-bold hover:bg-teal-700 transition-colors shadow-md focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 outline-none"
                     >
                         Create New Prompt
                     </button>
@@ -122,16 +117,27 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
     const isTemplate = 'label' in item;
     const title = isTemplate ? (item as Template).label : (item as Prompt).title;
     const subtitle = isTemplate ? (item as Template).title : null;
-    const creationDate = new Date(item._creationTime).toLocaleDateString('en-US', {
+    const creationDate = new Intl.DateTimeFormat('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric'
-    });
-    const updatedDate = item.updatedAt ? new Date(item.updatedAt).toLocaleDateString('en-US', {
+    }).format(new Date(item._creationTime));
+    const updatedDate = item.updatedAt ? new Intl.DateTimeFormat('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric'
-    }) : creationDate;
+    }).format(new Date(item.updatedAt)) : creationDate;
+
+    const handleRestore = (version: Version) => {
+        if (onRequestConfirm) {
+            onRequestConfirm(
+                `Restore this version from ${new Date(version.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}? This will overwrite the current content.`,
+                () => onRestoreVersion?.(version)
+            );
+        } else {
+            onRestoreVersion?.(version);
+        }
+    };
 
     return (
         <div className="flex-1 flex flex-col h-full bg-white overflow-hidden">
@@ -140,7 +146,8 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                 <button
                     onClick={onBack}
                     type="button"
-                    className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors"
+                    className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                    aria-label="Go back"
                 >
                     <ArrowLeft size={20} />
                 </button>
@@ -149,12 +156,16 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                         <button
                             onClick={() => setPreviewVersion(null)}
                             type="button"
-                            className="text-xs font-bold text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-100 hover:bg-teal-100 transition-all"
+                            className="text-xs font-bold text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-100 hover:bg-teal-100 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
                         >
                             Viewing History (Exit)
                         </button>
                     )}
-                    <button type="button" className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors">
+                    <button
+                        type="button"
+                        className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
+                        aria-label="More options"
+                    >
                         <MoreHorizontal size={20} />
                     </button>
                 </div>
@@ -164,23 +175,21 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                 <div className="max-w-4xl mx-auto space-y-8">
                     {/* Header */}
                     <div className="space-y-4">
-                        {/* Row 1: Title and Created Date */}
                         <div className="flex justify-between items-start gap-4">
                             <div className="flex items-center gap-2 group flex-1">
-                                <FileText className="text-slate-400" size={28} />
-                                <h1 className="text-3xl font-bold text-slate-900 tracking-tight leading-tight">
+                                <FileText className="text-slate-400" size={28} aria-hidden="true" />
+                                <h1 className="text-3xl font-bold text-slate-900 tracking-tight leading-tight" style={{ textWrap: 'balance' } as React.CSSProperties}>
                                     {previewVersion ? `(History) ${title}` : title}
                                 </h1>
                             </div>
                             <div className="text-right whitespace-nowrap pt-2">
-                                <p className="text-slate-400 text-sm">Created {creationDate}</p>
+                                <p className="text-slate-400 text-sm tabular-nums">Created {creationDate}</p>
                             </div>
                         </div>
 
-                        {/* Row 2: Category and Header Buttons */}
                         <div className="flex justify-between items-center gap-4">
                             <div className="flex items-center gap-2 text-slate-900 font-bold uppercase tracking-wider text-sm">
-                                <FileText size={16} />
+                                <FileText size={16} aria-hidden="true" />
                                 <span>{item.category}</span>
                             </div>
                             <div className="flex justify-end gap-2 pr-1">
@@ -190,8 +199,8 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                                         onCopy(previewVersion ? previewVersion.content : item.content);
                                     }}
                                     type="button"
-                                    title="Copy Prompt"
-                                    className="p-2 bg-teal-50 text-teal-600 rounded-lg hover:bg-teal-100 transition-all border border-teal-100"
+                                    aria-label="Copy prompt"
+                                    className="p-2 bg-teal-50 text-teal-600 rounded-lg hover:bg-teal-100 transition-colors border border-teal-100 focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
                                 >
                                     <Copy size={16} />
                                 </button>
@@ -201,8 +210,8 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                                         onEdit();
                                     }}
                                     type="button"
-                                    title="Edit Prompt"
-                                    className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-100 transition-all border border-slate-100"
+                                    aria-label="Edit prompt"
+                                    className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:bg-slate-100 transition-colors border border-slate-100 focus-visible:ring-2 focus-visible:ring-teal-500 outline-none"
                                 >
                                     <Edit2 size={16} />
                                 </button>
@@ -221,9 +230,9 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                                 onCopy(previewVersion ? previewVersion.content : item.content);
                             }}
                             type="button"
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-6 bg-[#14b8a6] text-white font-bold rounded-xl hover:bg-[#0d9488] transition-all shadow-sm"
+                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-6 bg-[#14b8a6] text-white font-bold rounded-xl hover:bg-[#0d9488] transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 outline-none"
                         >
-                            <Copy size={20} />
+                            <Copy size={20} aria-hidden="true" />
                             Copy Prompt
                         </button>
                         <button
@@ -232,9 +241,9 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                                 onEdit();
                             }}
                             type="button"
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-6 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-all shadow-sm"
+                            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-6 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 outline-none"
                         >
-                            <Edit2 size={20} className="text-slate-400" />
+                            <Edit2 size={20} className="text-slate-400" aria-hidden="true" />
                             Edit Prompt
                         </button>
                     </div>
@@ -259,11 +268,14 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                                         </span>
                                     );
                                 })}
+                                {item.tags.length === 0 && (
+                                    <span className="text-slate-400 text-sm">No tags</span>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
                             <span className="text-slate-900 font-bold min-w-[120px]">Last Updated:</span>
-                            <span className="text-slate-500">{updatedDate}</span>
+                            <span className="text-slate-500 tabular-nums">{updatedDate}</span>
                         </div>
                     </div>
 
@@ -276,50 +288,61 @@ const PromptDetail: React.FC<PromptDetailProps> = ({
                                     const isActive = (i === 0 && !previewVersion) || (previewVersion?._id === v._id);
                                     return (
                                         <div key={v._id} className="relative pl-6 pb-2">
-                                            <div className={`absolute left-[-29px] top-1.5 w-4 h-4 rounded-full border-4 border-white shadow-sm transition-colors ${isActive ? 'bg-teal-500' : 'bg-slate-200'}`} />
-                                            <button
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    const scrollPos = scrollContainerRef.current?.scrollTop;
-                                                    if (i === 0) {
-                                                        setPreviewVersion(null);
-                                                    } else {
-                                                        setPreviewVersion(v);
-                                                    }
-                                                    // Request a frame to restore scroll after render jump
-                                                    requestAnimationFrame(() => {
-                                                        if (scrollContainerRef.current && scrollPos !== undefined) {
-                                                            scrollContainerRef.current.scrollTop = scrollPos;
+                                            <div className={`absolute left-[-29px] top-1.5 w-4 h-4 rounded-full border-4 border-white shadow-sm transition-colors ${isActive ? 'bg-teal-500' : 'bg-slate-200'}`} aria-hidden="true" />
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        const scrollPos = scrollContainerRef.current?.scrollTop;
+                                                        if (i === 0) {
+                                                            setPreviewVersion(null);
+                                                        } else {
+                                                            setPreviewVersion(v);
                                                         }
-                                                    });
-                                                }}
-                                                type="button"
-                                                className={`flex items-center gap-2 text-left hover:text-teal-600 transition-colors ${isActive ? 'text-teal-600 font-bold' : ''}`}
-                                            >
-                                                <span className={`${isActive ? 'text-teal-700' : 'text-slate-900'} font-bold`}>
-                                                    {i === 0 ? 'Last Updated:' : 'Version from:'}
-                                                </span>
-                                                <span className={isActive ? 'text-teal-600' : 'text-slate-500'}>
-                                                    {new Date(v.timestamp).toLocaleString('en-US', {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        year: 'numeric',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
-                                                </span>
-                                                {isActive && <CheckCircle2 size={14} className="text-teal-500" />}
-                                            </button>
+                                                        requestAnimationFrame(() => {
+                                                            if (scrollContainerRef.current && scrollPos !== undefined) {
+                                                                scrollContainerRef.current.scrollTop = scrollPos;
+                                                            }
+                                                        });
+                                                    }}
+                                                    type="button"
+                                                    className={`flex items-center gap-2 text-left hover:text-teal-600 transition-colors focus-visible:ring-2 focus-visible:ring-teal-500 rounded outline-none ${isActive ? 'text-teal-600 font-bold' : ''}`}
+                                                >
+                                                    <span className={`${isActive ? 'text-teal-700' : 'text-slate-900'} font-bold`}>
+                                                        {i === 0 ? 'Last Updated:' : 'Version from:'}
+                                                    </span>
+                                                    <span className={`tabular-nums ${isActive ? 'text-teal-600' : 'text-slate-500'}`}>
+                                                        {new Intl.DateTimeFormat('en-US', {
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            year: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        }).format(new Date(v.timestamp))}
+                                                    </span>
+                                                    {isActive && <CheckCircle2 size={14} className="text-teal-500" aria-hidden="true" />}
+                                                </button>
+                                                {i > 0 && previewVersion?._id === v._id && (
+                                                    <button
+                                                        onClick={() => handleRestore(v)}
+                                                        type="button"
+                                                        className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 outline-none"
+                                                    >
+                                                        <RotateCcw size={12} className="inline mr-1" aria-hidden="true" />
+                                                        Restore this version
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })
                             ) : (
                                 <div className="relative pl-6">
-                                    <div className="absolute left-[-29px] top-1.5 w-4 h-4 rounded-full bg-slate-200 border-4 border-white shadow-sm" />
+                                    <div className="absolute left-[-29px] top-1.5 w-4 h-4 rounded-full bg-slate-200 border-4 border-white shadow-sm" aria-hidden="true" />
                                     <div className="flex items-center gap-2">
                                         <span className="text-slate-900 font-bold">First updated:</span>
-                                        <span className="text-slate-500">{creationDate}</span>
+                                        <span className="text-slate-500 tabular-nums">{creationDate}</span>
                                     </div>
                                 </div>
                             )}
