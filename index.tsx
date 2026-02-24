@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ConvexProvider, ConvexReactClient, useQuery, useMutation } from "convex/react";
 import { api } from "./convex/_generated/api";
 import { Id } from "./convex/_generated/dataModel";
+import './src/styles.css';
 
 import Layout from './src/components/Layout';
 import Sidebar from './src/components/Sidebar';
